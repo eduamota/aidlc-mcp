@@ -3,6 +3,7 @@ import { DlcStateMachine } from "../engine/state-machine.js";
 import { evaluateRubric, STAGE_DEFINITIONS } from "../engine/socratic-rubric.js";
 import { listAllIntents } from "../utils/filesystem.js";
 import { PROFILES } from "../engine/profiles.js";
+import { scanWorkspaceForReverseEngineering } from "../utils/reverse-engineering.js";
 export function registerDlcTools(server) {
     // 1. dlc_init_intent
     server.tool("dlc_init_intent", "Initialize a new AI-DLC intent with an adaptive workflow profile, scaffolding `./aidlc/spaces/default/intents/<date>-<label>/` and `aidlc-state.md`.", {
@@ -13,12 +14,26 @@ export function registerDlcTools(server) {
             .optional()
             .default("feature")
             .describe("Workflow profile: 'feature' (all 6 phases), 'mvp' (fast prototype), 'bugfix' (RCA & fix), 'express' (condensed)"),
-    }, async ({ label, description, profile }) => {
+        projectType: z
+            .enum(["greenfield", "brownfield", "auto"])
+            .optional()
+            .default("auto")
+            .describe("Project type: 'greenfield' (new project), 'brownfield' (existing codebase, injects Reverse Engineering stage), or 'auto' (scans workspace automatically)"),
+    }, async ({ label, description, profile, projectType }) => {
         try {
+            let resolvedType = "greenfield";
+            if (projectType === "auto") {
+                const scan = await scanWorkspaceForReverseEngineering();
+                resolvedType = scan.projectType;
+            }
+            else {
+                resolvedType = projectType;
+            }
             const { intent, intentDir } = await DlcStateMachine.initIntent({
                 label,
                 description,
                 profile,
+                projectType: resolvedType,
             });
             const activeStage = intent.stages[0];
             const stageDef = STAGE_DEFINITIONS[activeStage.id];
@@ -371,6 +386,57 @@ export function registerDlcTools(server) {
         return {
             content: [{ type: "text", text: sections.join("\n") }],
         };
+    });
+    // 8. dlc_scan_workspace
+    server.tool("dlc_scan_workspace", "Scan the current workspace for brownfield reverse engineering, detecting runtimes, manifests, key directories, dependencies, and generating the baseline reverse-engineering documentation.", {
+        autoSave: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("If true, automatically saves the generated discovery report as reverse-engineering.md for the active intent."),
+        intentId: z.string().optional().describe("Optional intent ID."),
+    }, async ({ autoSave, intentId }) => {
+        try {
+            const scan = await scanWorkspaceForReverseEngineering();
+            let saveNotice = "";
+            if (autoSave) {
+                try {
+                    const sub = await DlcStateMachine.submitDraft({
+                        stageId: "reverse-engineering",
+                        artifactName: "reverse-engineering.md",
+                        content: scan.draftDocument,
+                        intentId,
+                    });
+                    saveNotice = `\n\n✅ **Auto-saved Artifact**: \`${sub.artifactPath}\` (Rubric satisfied: ${sub.evaluation.satisfied ? "Yes" : "No"})`;
+                }
+                catch (err) {
+                    saveNotice = `\n\n⚠️ Could not auto-save: ${err.message}`;
+                }
+            }
+            const lines = [
+                `# Workspace Discovery & Reverse Engineering Scan`,
+                `* **Classification**: \`${scan.projectType}\``,
+                `* **Runtimes**: ${scan.detectedRuntimes.length > 0 ? scan.detectedRuntimes.join(", ") : "None detected"}`,
+                `* **Manifests**: ${scan.manifests.length > 0 ? scan.manifests.join(", ") : "None"}`,
+                `* **Source Directories**: ${scan.keyDirectories.length > 0 ? scan.keyDirectories.join(", ") : "None"}`,
+                `* **Dependencies**: ${scan.dependencies.length > 0 ? scan.dependencies.slice(0, 10).join(", ") : "Minimal"}`,
+                saveNotice,
+                "",
+                "## Generated Reverse Engineering Baseline Document:",
+                "```markdown",
+                scan.draftDocument,
+                "```",
+            ];
+            return {
+                content: [{ type: "text", text: lines.join("\n") }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Workspace scan failed: ${err.message}` }],
+            };
+        }
     });
 }
 //# sourceMappingURL=tools.js.map

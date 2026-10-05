@@ -9,16 +9,18 @@ export class DlcStateMachine {
     static async initIntent(params) {
         const ws = params.workspaceDir || getWorkspaceDir();
         const profile = params.profile || "feature";
+        const projectType = params.projectType || "greenfield";
         if (!PROFILES[profile]) {
             throw new Error(`Invalid profile: '${profile}'. Supported profiles: ${Object.keys(PROFILES).join(", ")}`);
         }
         const intentId = generateIntentId(params.label);
         const now = new Date().toISOString();
-        const stages = createStagesForProfile(profile);
+        const stages = createStagesForProfile(profile, projectType);
         const intent = {
             intentId,
             label: params.label,
             profile,
+            projectType,
             description: params.description,
             createdAt: now,
             updatedAt: now,

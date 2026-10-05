@@ -1,5 +1,6 @@
 export type Phase = "initialization" | "ideation" | "inception" | "construction" | "verification" | "operation";
 export type ProfileType = "feature" | "mvp" | "bugfix" | "express";
+export type ProjectType = "greenfield" | "brownfield";
 export interface RubricDimension {
     id: string;
     title: string;
@@ -39,6 +40,7 @@ export interface IntentState {
     intentId: string;
     label: string;
     profile: ProfileType;
+    projectType?: ProjectType;
     description: string;
     createdAt: string;
     updatedAt: string;

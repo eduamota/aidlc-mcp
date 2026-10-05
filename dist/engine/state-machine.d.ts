@@ -1,4 +1,4 @@
-import { IntentState, ProfileType, RubricEvaluationResult } from "../types.js";
+import { IntentState, ProfileType, ProjectType, RubricEvaluationResult } from "../types.js";
 import { STAGE_DEFINITIONS } from "./socratic-rubric.js";
 export declare class DlcStateMachine {
     /**
@@ -8,6 +8,7 @@ export declare class DlcStateMachine {
         label: string;
         description: string;
         profile?: ProfileType;
+        projectType?: ProjectType;
         workspaceDir?: string;
     }): Promise<{
         intent: IntentState;

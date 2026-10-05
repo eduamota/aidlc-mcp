@@ -89,6 +89,7 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `dlc_approve_gate` | Confirm human sign-off and advance the state machine to the next stage. |
 | `dlc_list_intents` | List all tracked intents in the workspace. |
 | `dlc_get_setup_requirements` | Retrieve exact system requirements, environment prerequisites, and setup guides. |
+| `dlc_scan_workspace` | Scan workspace for brownfield reverse engineering & generate baseline docs. |
 
 ### Prompts
 | Prompt | Description |

@@ -1,4 +1,4 @@
-import { ProfileType, StageState } from "../types.js";
+import { ProfileType, ProjectType, StageState } from "../types.js";
 export interface ProfileDefinition {
     type: ProfileType;
     name: string;
@@ -7,6 +7,7 @@ export interface ProfileDefinition {
 }
 export declare const PROFILES: Record<ProfileType, ProfileDefinition>;
 /**
- * Initializes the list of StageState objects for a given profile.
+ * Initializes the list of StageState objects for a given profile and project type.
+ * If projectType is 'brownfield', injects 'reverse-engineering' before requirements analysis.
  */
-export declare function createStagesForProfile(profileType: ProfileType): StageState[];
+export declare function createStagesForProfile(profileType: ProfileType, projectType?: ProjectType): StageState[];

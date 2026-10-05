@@ -47,6 +47,62 @@ export const STAGE_DEFINITIONS = {
         },
     },
     // --- INCEPTION ---
+    "reverse-engineering": {
+        id: "reverse-engineering",
+        number: "2.0",
+        name: "Brownfield Reverse Engineering",
+        phase: "inception",
+        description: "Systematic code discovery and documentation of existing architecture, dependencies, data models, and entry points.",
+        persona: "aidlc-developer-agent",
+        defaultArtifactName: "reverse-engineering.md",
+        rubric: {
+            stageId: "reverse-engineering",
+            stageName: "Brownfield Reverse Engineering",
+            persona: "aidlc-developer-agent",
+            dimensions: [
+                {
+                    id: "tech_stack_and_dependencies",
+                    title: "Tech Stack & Runtime Environment",
+                    description: "Documents languages, runtimes, package managers, and primary dependencies in the codebase.",
+                    probingQuestions: [
+                        "What runtime environments, frameworks, and core dependencies are present in the repository?",
+                        "What build tools and configuration files define the execution environment?",
+                    ],
+                    heuristicKeywords: ["tech stack", "runtime", "dependencies", "framework", "package", "version"],
+                },
+                {
+                    id: "components_and_layout",
+                    title: "Component & Directory Layout",
+                    description: "Documents folder organization, key modules, entry points, and structural patterns.",
+                    probingQuestions: [
+                        "What is the directory organization and where do core modules live?",
+                        "What are the application entry points and execution flows?",
+                    ],
+                    heuristicKeywords: ["directory", "layout", "components", "structure", "entry point", "modules"],
+                },
+                {
+                    id: "data_contracts_and_apis",
+                    title: "Data Models & API Contracts",
+                    description: "Catalogs existing data schemas, database models, DTOs, and exposed endpoints/interfaces.",
+                    probingQuestions: [
+                        "What data schemas, database tables, or entities currently exist?",
+                        "What existing API routes or interfaces are exposed by this codebase?",
+                    ],
+                    heuristicKeywords: ["data model", "schema", "api", "endpoints", "contracts", "routes", "entities"],
+                },
+                {
+                    id: "conventions_and_constraints",
+                    title: "Conventions & Legacy Constraints",
+                    description: "Notes architectural conventions, legacy patterns, and technical constraints to respect.",
+                    probingQuestions: [
+                        "What existing coding conventions or architectural patterns must be preserved?",
+                        "Are there legacy gotchas, constraints, or known technical debt to be aware of?",
+                    ],
+                    heuristicKeywords: ["conventions", "constraints", "legacy", "debt", "patterns", "assumptions"],
+                },
+            ],
+        },
+    },
     "requirements-analysis": {
         id: "requirements-analysis",
         number: "2.1",

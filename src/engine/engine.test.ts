@@ -120,3 +120,57 @@ test("AI-DLC Lifecycle State Machine Flow", async () => {
     await fs.rm(tempWs, { recursive: true, force: true });
   }
 });
+
+test("Brownfield Reverse Engineering Injection & Evaluation", async () => {
+  const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-brownfield-"));
+
+  try {
+    // 1. Initialize intent with brownfield projectType
+    const { intent } = await DlcStateMachine.initIntent({
+      label: "legacy-crm-upgrade",
+      description: "Upgrade legacy CRM backend",
+      profile: "feature",
+      projectType: "brownfield",
+      workspaceDir: tempWs,
+    });
+
+    // Verify reverse-engineering is injected before requirements-analysis
+    const stageIds = intent.stages.map((s) => s.id);
+    const revEngIdx = stageIds.indexOf("reverse-engineering");
+    const reqIdx = stageIds.indexOf("requirements-analysis");
+
+    assert.ok(revEngIdx !== -1, "reverse-engineering should be in stages");
+    assert.ok(revEngIdx < reqIdx, "reverse-engineering should precede requirements-analysis");
+
+    // 2. Evaluate documentary reverse engineering draft
+    const docDraft = `
+# Brownfield Reverse Engineering Documentation
+
+## 1. System Overview & Tech Stack
+- Runtime: Node.js 20 with TypeScript
+- Package manager: npm, dependencies include express, pg, zod
+- Framework: Express.js REST API
+
+## 2. Component & Directory Layout
+- ./src/controllers: Request handlers
+- ./src/models: Database schemas and entities
+- ./src/routes: HTTP route definitions
+- Entry point: src/index.ts
+
+## 3. Data Models & API Contracts
+- Entities: User, Account, Contact, Deal
+- API endpoints: /api/v1/accounts, /api/v1/contacts, /api/v1/deals
+
+## 4. Conventions & Technical Constraints
+- Legacy gotchas: Raw SQL queries in older services require backward-compatible schemas.
+- Coding conventions: CamelCase properties, snake_case DB columns.
+    `;
+
+    const evalResult = evaluateRubric("reverse-engineering", docDraft);
+    assert.equal(evalResult.satisfied, true, "Factual reverse engineering draft should satisfy rubric without debate");
+    assert.equal(evalResult.unresolvedProbes.length, 0);
+  } finally {
+    await fs.rm(tempWs, { recursive: true, force: true });
+  }
+});
+

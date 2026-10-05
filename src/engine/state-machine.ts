@@ -1,4 +1,4 @@
-import { IntentState, ProfileType, RubricEvaluationResult } from "../types.js";
+import { IntentState, ProfileType, ProjectType, RubricEvaluationResult } from "../types.js";
 import { PROFILES, createStagesForProfile } from "./profiles.js";
 import { STAGE_DEFINITIONS, evaluateRubric } from "./socratic-rubric.js";
 import {
@@ -19,10 +19,12 @@ export class DlcStateMachine {
     label: string;
     description: string;
     profile?: ProfileType;
+    projectType?: ProjectType;
     workspaceDir?: string;
   }): Promise<{ intent: IntentState; intentDir: string }> {
     const ws = params.workspaceDir || getWorkspaceDir();
     const profile = params.profile || "feature";
+    const projectType = params.projectType || "greenfield";
 
     if (!PROFILES[profile]) {
       throw new Error(`Invalid profile: '${profile}'. Supported profiles: ${Object.keys(PROFILES).join(", ")}`);
@@ -30,12 +32,13 @@ export class DlcStateMachine {
 
     const intentId = generateIntentId(params.label);
     const now = new Date().toISOString();
-    const stages = createStagesForProfile(profile);
+    const stages = createStagesForProfile(profile, projectType);
 
     const intent: IntentState = {
       intentId,
       label: params.label,
       profile,
+      projectType,
       description: params.description,
       createdAt: now,
       updatedAt: now,

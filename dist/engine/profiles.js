@@ -51,11 +51,22 @@ export const PROFILES = {
     },
 };
 /**
- * Initializes the list of StageState objects for a given profile.
+ * Initializes the list of StageState objects for a given profile and project type.
+ * If projectType is 'brownfield', injects 'reverse-engineering' before requirements analysis.
  */
-export function createStagesForProfile(profileType) {
+export function createStagesForProfile(profileType, projectType = "greenfield") {
     const profile = PROFILES[profileType] || PROFILES.feature;
-    return profile.stageIds.map((stageId, index) => {
+    const stageIds = [...profile.stageIds];
+    if (projectType === "brownfield" && !stageIds.includes("reverse-engineering")) {
+        const reqIndex = stageIds.indexOf("requirements-analysis");
+        if (reqIndex !== -1) {
+            stageIds.splice(reqIndex, 0, "reverse-engineering");
+        }
+        else {
+            stageIds.unshift("reverse-engineering");
+        }
+    }
+    return stageIds.map((stageId, index) => {
         const def = STAGE_DEFINITIONS[stageId];
         if (!def) {
             throw new Error(`Unknown stage ID: ${stageId}`);
