@@ -14,6 +14,7 @@ import {
   CONSTRUCTION_PROTOCOL,
   RECOVERY_PROTOCOL,
 } from "./protocols.js";
+import { getStageSpec, getAllStageSpecs } from "../stages/registry.js";
 
 test("Socratic Rubric Evaluation", () => {
   // 1. Incomplete draft
@@ -270,4 +271,31 @@ test("AI-DLC Protocols: Decisions, Reviews, and Recovery Reopening", async () =>
     await fs.rm(tempWs, { recursive: true, force: true });
   }
 });
+
+test("Official Stage Specifications Catalog (33 Stages)", () => {
+  const allSpecs = getAllStageSpecs();
+  assert.equal(allSpecs.length, 33, "Should bundle all 33 official stages");
+
+  // Verify critical stages exist and contain execution markdown
+  const reqSpec = getStageSpec("requirements-analysis");
+  assert.ok(reqSpec, "requirements-analysis spec must exist");
+  assert.equal(reqSpec.phase, "inception");
+  assert.equal(reqSpec.lead_agent, "aidlc-product-agent");
+  assert.equal(reqSpec.reviewer, "aidlc-product-lead-agent");
+  assert.ok(reqSpec.markdown.includes("## Steps"));
+  assert.ok(reqSpec.markdown.includes("### Step 1: Load Prior Context"));
+
+  // Verify domain-design
+  const domainSpec = getStageSpec("domain-design");
+  assert.ok(domainSpec);
+  assert.equal(domainSpec.phase, "inception");
+  assert.equal(domainSpec.lead_agent, "aidlc-architect-agent");
+  assert.ok(domainSpec.markdown.includes("Domain Design"));
+
+  // Verify alias lookup
+  const stateSpec = getStageSpec("state-initialization");
+  assert.ok(stateSpec);
+  assert.equal(stateSpec.slug, "state-init");
+});
+
 

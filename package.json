@@ -9,7 +9,8 @@
   },
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "generate:stages": "node scripts/generate-stages.js",
+    "build": "node scripts/generate-stages.js && tsc && mkdir -p dist/stages && cp -R src/stages/* dist/stages/ 2>/dev/null || true",
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "start": "node ./dist/index.js",

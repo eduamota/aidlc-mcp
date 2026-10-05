@@ -6,6 +6,7 @@ import { SCOPES } from "../engine/profiles.js";
 import { scanWorkspaceForReverseEngineering } from "../utils/reverse-engineering.js";
 import { runDlcDoctor } from "../utils/doctor.js";
 import { addKnowledgeDocument, listKnowledgeDocuments, readKnowledgeDocument } from "../utils/knowledge.js";
+import { getStageSpec, getAllStageSpecs } from "../stages/registry.js";
 const SCOPE_ENUM = [
     "enterprise",
     "feature",
@@ -707,6 +708,66 @@ export function registerDlcTools(server) {
             return {
                 isError: true,
                 content: [{ type: "text", text: `Failed to reopen stage: ${err.message}` }],
+            };
+        }
+    });
+    // 18. dlc_get_stage_spec: Official Upstream Stage Execution Specification
+    server.tool("dlc_get_stage_spec", "Retrieve the complete official AI-DLC step-by-step stage execution guide, frontmatter contracts, required inputs/outputs, and sensor rules from core/aidlc-common/stages/.", {
+        stageId: z
+            .string()
+            .optional()
+            .describe("Stage ID or slug (e.g. 'requirements-analysis', 'domain-design', 'intent-capture'). Defaults to active stage."),
+        intentId: z.string().optional().describe("Optional intent ID."),
+    }, async ({ stageId, intentId }) => {
+        try {
+            let targetId = stageId;
+            if (!targetId) {
+                const status = await DlcStateMachine.getStatus(intentId);
+                targetId = status.activeStageState?.id;
+            }
+            if (!targetId) {
+                return {
+                    isError: true,
+                    content: [{ type: "text", text: "No stage ID specified and no active intent found." }],
+                };
+            }
+            const spec = getStageSpec(targetId);
+            if (!spec) {
+                const all = getAllStageSpecs().map((s) => s.slug).join(", ");
+                return {
+                    isError: true,
+                    content: [
+                        {
+                            type: "text",
+                            text: `Stage specification for '${targetId}' not found.\nAvailable stages:\n${all}`,
+                        },
+                    ],
+                };
+            }
+            const metaLines = [
+                `# Official Stage Specification: ${spec.name} (\`${spec.slug}\`)`,
+                `* **Phase**: \`${spec.phase}\``,
+                `* **Execution**: \`${spec.execution}\`${spec.condition ? ` (${spec.condition})` : ""}`,
+                `* **Lead Agent**: \`${spec.lead_agent || "orchestrator"}\``,
+                spec.reviewer ? `* **Reviewer Agent**: \`${spec.reviewer}\` (${spec.review_class || "advisory"})` : "",
+                spec.produces && spec.produces.length > 0 ? `* **Produces Artifacts**: ${JSON.stringify(spec.produces)}` : "",
+                spec.consumes && spec.consumes.length > 0 ? `* **Consumes Artifacts**: ${JSON.stringify(spec.consumes)}` : "",
+                spec.sensors && spec.sensors.length > 0 ? `* **Sensors**: ${spec.sensors.join(", ")}` : "",
+                spec.inputs ? `* **Inputs**: ${spec.inputs}` : "",
+                spec.outputs ? `* **Outputs**: ${spec.outputs}` : "",
+                "",
+                "---",
+                "",
+                spec.markdown,
+            ].filter(Boolean);
+            return {
+                content: [{ type: "text", text: metaLines.join("\n") }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Failed to get stage spec: ${err.message}` }],
             };
         }
     });

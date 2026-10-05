@@ -114,6 +114,7 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `dlc_log_decision` | Log non-gate architectural & technical trade-offs into `decisions.json` (§2). |
 | `dlc_request_review` | Dispatch independent reviewer verification pass (§12a) with structured verdicts. |
 | `dlc_reopen_stage` | Reopen a previous stage back to `in_progress` (Recovery Protocol), preserving files. |
+| `dlc_get_stage_spec` | Retrieve official execution steps, YAML frontmatter, and sensor rules for any stage. |
 
 ### Prompts
 | Prompt | Description |
@@ -140,6 +141,8 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `aidlc://rubrics` | Complete catalog of 33 stage rubrics and probing dimensions. |
 | `aidlc://scopes` | Scope routing matrix and stage sequences. |
 | `aidlc://knowledge` | Listing of team standards and reference documents. |
+| `aidlc://stages/catalog` | Metadata catalog for all 33 official stages from `core/aidlc-common/stages/`. |
+| `aidlc://stages/{slug}` | Verbatim markdown execution guide & frontmatter for any stage (e.g. `domain-design`). |
 | `aidlc://protocols/stage-protocol` | Voice contract, HARD STOP approval gate rules, atomic stage ritual. |
 | `aidlc://protocols/reviewer-protocol` | Independent reviewer invocation protocol (§12a) and verdict schema. |
 | `aidlc://protocols/construction-protocol` | Units of Work (UoW) DAG execution, Plan Approval, build-and-test loopback. |

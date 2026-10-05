@@ -12,6 +12,7 @@ import {
   CONSTRUCTION_PROTOCOL,
   RECOVERY_PROTOCOL,
 } from "../engine/protocols.js";
+import { getAllStageSpecs } from "../stages/registry.js";
 
 export function registerDlcResources(server: McpServer): void {
   // 1. aidlc://state -> aidlc-state.md
@@ -204,4 +205,49 @@ export function registerDlcResources(server: McpServer): void {
       contents: [{ uri: uri.href, mimeType: "text/markdown", text: RECOVERY_PROTOCOL }],
     })
   );
+
+  // 10. aidlc://stages/catalog -> All official stage specifications catalog
+  server.registerResource(
+    "aidlc-stages-catalog",
+    "aidlc://stages/catalog",
+    {
+      title: "AI-DLC Official Stage Specifications Catalog",
+      description: "Listing and metadata for all 33 official AI-DLC stages from core/aidlc-common/stages/.",
+      mimeType: "application/json",
+    },
+    async (uri) => {
+      const all = getAllStageSpecs().map((s) => ({
+        slug: s.slug,
+        name: s.name,
+        phase: s.phase,
+        execution: s.execution,
+        condition: s.condition,
+        lead_agent: s.lead_agent,
+        reviewer: s.reviewer,
+        produces: s.produces,
+        consumes: s.consumes,
+        scopes: s.scopes,
+        resourceUri: `aidlc://stages/${s.slug}`,
+      }));
+      return {
+        contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(all, null, 2) }],
+      };
+    }
+  );
+
+  // 11. Individual stage resources aidlc://stages/{slug}
+  for (const spec of getAllStageSpecs()) {
+    server.registerResource(
+      `aidlc-stage-${spec.slug}`,
+      `aidlc://stages/${spec.slug}`,
+      {
+        title: `Stage Specification: ${spec.name}`,
+        description: `Official step-by-step execution guide and contracts for ${spec.name} (${spec.slug}).`,
+        mimeType: "text/markdown",
+      },
+      async (uri) => ({
+        contents: [{ uri: uri.href, mimeType: "text/markdown", text: spec.markdown }],
+      })
+    );
+  }
 }
