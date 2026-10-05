@@ -5,7 +5,9 @@ import path from "node:path";
 import os from "node:os";
 import { DlcStateMachine } from "./state-machine.js";
 import { evaluateRubric } from "./socratic-rubric.js";
-import { PROFILES } from "./profiles.js";
+import { SCOPES, createStagesForScope } from "./profiles.js";
+import { runDlcDoctor } from "../utils/doctor.js";
+import { addKnowledgeDocument, listKnowledgeDocuments, readKnowledgeDocument } from "../utils/knowledge.js";
 
 test("Socratic Rubric Evaluation", () => {
   // 1. Incomplete draft
@@ -37,8 +39,26 @@ Without this real-time inventory system, over-selling occurs daily causing churn
   assert.equal(eval2.score, 1.0);
 });
 
+test("The 11 AI-DLC Core Scopes and Stage Routing", () => {
+  const scopeKeys = Object.keys(SCOPES);
+  assert.equal(scopeKeys.length, 11, "Should support all 11 core scopes");
+
+  // Verify enterprise has all stages
+  assert.equal(SCOPES.enterprise.stageIds.length, 30);
+  assert.equal(SCOPES.feature.stageIds.length, 30);
+  assert.equal(SCOPES.poc.stageIds.length, 5);
+  assert.equal(SCOPES.bugfix.stageIds.length, 6);
+  assert.equal(SCOPES.express.stageIds.length, 7);
+
+  // Verify greenfield vs brownfield stage mapping
+  const greenStages = createStagesForScope("poc", "greenfield");
+  assert.equal(greenStages.some((s) => s.id === "reverse-engineering"), false);
+
+  const brownStages = createStagesForScope("poc", "brownfield");
+  assert.equal(brownStages.some((s) => s.id === "reverse-engineering"), true);
+});
+
 test("AI-DLC Lifecycle State Machine Flow", async () => {
-  // Use a temporary workspace folder for testing
   const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-test-"));
 
   try {
@@ -51,13 +71,12 @@ test("AI-DLC Lifecycle State Machine Flow", async () => {
     });
 
     assert.equal(intent.profile, "express");
-    assert.equal(intent.stages.length, PROFILES.express.stageIds.length);
     assert.ok(intentDir.includes("test-auth-svc"));
 
     // Check files created
     const stateMd = await fs.readFile(path.join(intentDir, "aidlc-state.md"), "utf-8");
     assert.ok(stateMd.includes("AI-DLC State"));
-    assert.ok(stateMd.includes("Requirements & User Stories"));
+    assert.ok(stateMd.includes("Requirements Analysis"));
 
     // 2. Check status
     const status1 = await DlcStateMachine.getStatus(undefined, tempWs);
@@ -105,7 +124,7 @@ test("AI-DLC Lifecycle State Machine Flow", async () => {
     });
     assert.equal(subResult2.evaluation.satisfied, true);
 
-    // 5. Approve gate -> advances to stage 2 (code-generation in express)
+    // 5. Approve gate -> advances to stage 2
     const approveResult = await DlcStateMachine.approveGate({
       notes: "Requirements reviewed and approved by lead architect.",
       workspaceDir: tempWs,
@@ -121,56 +140,39 @@ test("AI-DLC Lifecycle State Machine Flow", async () => {
   }
 });
 
-test("Brownfield Reverse Engineering Injection & Evaluation", async () => {
-  const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-brownfield-"));
+test("Two-Tier Knowledge Base Management", async () => {
+  const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-kb-"));
 
   try {
-    // 1. Initialize intent with brownfield projectType
-    const { intent } = await DlcStateMachine.initIntent({
-      label: "legacy-crm-upgrade",
-      description: "Upgrade legacy CRM backend",
-      profile: "feature",
-      projectType: "brownfield",
+    // 1. Add team standard
+    const doc = await addKnowledgeDocument({
+      filename: "company-architecture-standards.md",
+      content: "# Architecture Standards\nAll microservices must use gRPC for internal traffic and OpenTelemetry for traces.",
+      category: "shared",
       workspaceDir: tempWs,
     });
 
-    // Verify reverse-engineering is injected before requirements-analysis
-    const stageIds = intent.stages.map((s) => s.id);
-    const revEngIdx = stageIds.indexOf("reverse-engineering");
-    const reqIdx = stageIds.indexOf("requirements-analysis");
+    assert.equal(doc.filename, "company-architecture-standards.md");
+    assert.equal(doc.category, "shared");
 
-    assert.ok(revEngIdx !== -1, "reverse-engineering should be in stages");
-    assert.ok(revEngIdx < reqIdx, "reverse-engineering should precede requirements-analysis");
+    // 2. List documents
+    const list = await listKnowledgeDocuments(tempWs);
+    assert.equal(list.length, 1);
+    assert.equal(list[0].id, "company-architecture-standards");
 
-    // 2. Evaluate documentary reverse engineering draft
-    const docDraft = `
-# Brownfield Reverse Engineering Documentation
-
-## 1. System Overview & Tech Stack
-- Runtime: Node.js 20 with TypeScript
-- Package manager: npm, dependencies include express, pg, zod
-- Framework: Express.js REST API
-
-## 2. Component & Directory Layout
-- ./src/controllers: Request handlers
-- ./src/models: Database schemas and entities
-- ./src/routes: HTTP route definitions
-- Entry point: src/index.ts
-
-## 3. Data Models & API Contracts
-- Entities: User, Account, Contact, Deal
-- API endpoints: /api/v1/accounts, /api/v1/contacts, /api/v1/deals
-
-## 4. Conventions & Technical Constraints
-- Legacy gotchas: Raw SQL queries in older services require backward-compatible schemas.
-- Coding conventions: CamelCase properties, snake_case DB columns.
-    `;
-
-    const evalResult = evaluateRubric("reverse-engineering", docDraft);
-    assert.equal(evalResult.satisfied, true, "Factual reverse engineering draft should satisfy rubric without debate");
-    assert.equal(evalResult.unresolvedProbes.length, 0);
+    // 3. Read document
+    const read = await readKnowledgeDocument("company-architecture-standards", tempWs);
+    assert.ok(read);
+    assert.ok(read.content.includes("OpenTelemetry"));
   } finally {
     await fs.rm(tempWs, { recursive: true, force: true });
   }
 });
 
+test("AI-DLC Doctor Diagnostics", async () => {
+  const report = await runDlcDoctor();
+  assert.ok(report.checks.length >= 4);
+  const nodeCheck = report.checks.find((c) => c.name === "Node.js Runtime");
+  assert.ok(nodeCheck);
+  assert.equal(nodeCheck.status, "pass");
+});

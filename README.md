@@ -1,29 +1,45 @@
 # AI-DLC Socratic MCP Server
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that implements the **AI-Driven Life Cycle (AI-DLC)** methodology (inspired by [AWS AI-DLC](https://github.com/awslabs/aidlc-workflows)) with an embedded **Socratic Elicitation & Review Engine**.
+A comprehensive [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server implementing the complete **AI-Driven Life Cycle (AI-DLC)** methodology (matching [AWS AI-DLC](https://github.com/awslabs/aidlc-workflows)) with an embedded **Socratic Elicitation & Review Engine**.
 
-It enforces disciplined, verifiable software delivery for AI coding assistants (Claude Code, Cursor, Codex CLI, Antigravity, Kiro) through guided inquiry, stage-specific rubrics, and explicit approval gates.
-
----
-
-## 🌟 Key Features
-
-1. **Full Lifecycle Steering**: 
-   - *Initialization* $\rightarrow$ *Ideation* $\rightarrow$ *Inception* $\rightarrow$ *Construction* $\rightarrow$ *Verification* $\rightarrow$ *Operation*.
-2. **Adaptive Workflow Profiles**:
-   - `feature`: All 6 phases and complete verification.
-   - `mvp`: Fast greenfield prototype flow.
-   - `bugfix`: Root cause analysis and surgical regression fix.
-   - `express`: Lightweight rapid change flow.
-3. **Embedded Socratic Rubric Engine**:
-   - Evaluates drafted artifacts against stage-specific probing criteria (edge cases, non-goals, failure modes, blast radiuses, trade-offs).
-   - Generates lingering Socratic inquiries until the rubric is satisfied.
-4. **Approval Gate Enforcement**:
-   - *"You decide, AI executes."* Stages cannot transition until criteria are met and the human explicitly approves.
-5. **Traceable Local State**:
-   - Stores versioned artifacts and canonical `aidlc-state.md` under `./aidlc/spaces/default/intents/<YYMMDD>-<label>/`.
+It equips AI coding assistants (Claude Code, Cursor, Codex CLI, Antigravity, Kiro) with structured lifecycle steering, 11 workflow scopes, 33 lifecycle stages, 11 domain personas, a two-tier knowledge base, and explicit approval gates (*"You decide, AI executes"*).
 
 ---
+
+## 🌟 Comprehensive Features
+
+1. **Complete 33-Stage Lifecycle Grid**:
+   - **Phase 0: Initialization**: Scaffolding, greenfield/brownfield detection, state initialization.
+   - **Phase 1: Ideation**: Intent framing, market research, feasibility, scoping, mockups, handoff.
+   - **Phase 2: Inception**: Reverse engineering, practices discovery, requirements analysis, user stories, domain architecture, units of work DAG, contracts, delivery planning.
+   - **Phase 3: Construction**: Functional design, NFR security specs, resilience architecture, IaC design, clean code generation, build & automated tests, CI pipeline.
+   - **Phase 4: Operation / Verification**: CD pipeline, environment provisioning, deployment execution, observability & alarms, incident runbooks, load testing, architectural reflection.
+
+2. **The 11 Core Scopes & Routing Matrix**:
+   | Scope | Stages | Default Depth | Default Test Strategy | Description |
+   |---|---|---|---|---|
+   | `enterprise` | 30 | Comprehensive | Comprehensive | Regulated enterprise feature with full audit trail |
+   | `feature` | 30 | Standard | Standard | Full lifecycle for new features |
+   | `mvp` | 20 | Standard | Standard | Greenfield prototype, skipping late operations |
+   | `poc` | 5 | Minimal | Minimal | Prove feasibility fast |
+   | `bugfix` | 6 | Minimal | Minimal | Surgical fix, verification, and deploy |
+   | `refactor` | 7 | Minimal | Minimal | Restructure existing code with verified deploy |
+   | `infra` | 10 | Standard | Standard | IaC, provisioning, security, and telemetry |
+   | `security-patch`| 7 | Minimal | Minimal | Rapid CVE response |
+   | `classic` | 15 | Standard | Standard | V1 Inception + Construction with advisory reviews |
+   | `workshop` | 23 | Standard | Minimal | Facilitated training lifecycle |
+   | `express` | 7 | Minimal | Minimal | Streamlined requirements to deployment |
+
+3. **Two-Tier Knowledge Base (`aidlc/spaces/default/knowledge/`)**:
+   - **Tier 1 (Methodology)**: Preloaded rubrics and persona protocols.
+   - **Tier 2 (Team Knowledge)**: Curated team coding standards, architecture principles, and intent documents (PRDs, vision briefs).
+
+4. **Embedded Socratic Rubric Engine**:
+   - Probes non-goals, architectural trade-offs, failure blast radiuses, concurrency limits, and security trust boundaries.
+   - Requires rubric satisfaction before allowing gate approvals.
+
+5. **Diagnostic Doctor (`dlc_doctor`)**:
+   - Health check verifying Node.js runtime, Git repository, filesystem write permissions, active space, and intent state.
 
 ---
 
@@ -74,7 +90,6 @@ npm run build
 ```
 Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 
-
 ---
 
 ## 🛠️ MCP Primitives
@@ -82,32 +97,46 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 ### Tools
 | Tool | Description |
 |---|---|
-| `dlc_init_intent` | Initialize a new intent with profile (`feature`, `mvp`, `bugfix`, `express`) and scaffold files. |
-| `dlc_get_status` | Retrieve active intent progress, current stage, gate status, and unresolved Socratic probes. |
-| `dlc_check_rubric` | Pre-flight test draft content against a stage's Socratic rubric without saving to disk. |
+| `dlc_doctor` | Run comprehensive environment and workspace health diagnostics. |
+| `dlc_init_intent` | Initialize an intent with scope (11 scopes), depth, test strategy, and project type. |
+| `dlc_get_status` | Retrieve active intent progress, stage state, and unresolved Socratic probes. |
+| `dlc_get_scope_matrix` | View the 11-scope routing matrix comparing stage counts and defaults. |
+| `dlc_switch_intent` | Switch workspace active intent. |
+| `dlc_scan_workspace` | Scan workspace for brownfield reverse engineering & generate baseline docs. |
+| `dlc_knowledge_add` | Add PRDs, vision docs, or team standards to the knowledge base. |
+| `dlc_knowledge_list` | List all available knowledge base documents in the active space. |
+| `dlc_knowledge_read` | Read the full content of a knowledge document into agent context. |
+| `dlc_check_rubric` | Test draft content against a stage's Socratic rubric without saving to disk. |
 | `dlc_submit_draft` | Save stage artifact markdown and evaluate rubric satisfaction. |
 | `dlc_approve_gate` | Confirm human sign-off and advance the state machine to the next stage. |
 | `dlc_list_intents` | List all tracked intents in the workspace. |
-| `dlc_get_setup_requirements` | Retrieve exact system requirements, environment prerequisites, and setup guides. |
-| `dlc_scan_workspace` | Scan workspace for brownfield reverse engineering & generate baseline docs. |
+| `dlc_get_setup_requirements` | Retrieve system prerequisites, environment setup, and client configs. |
 
 ### Prompts
 | Prompt | Description |
 |---|---|
-| `aidlc_start` | Orchestrates workflow kickoff, profile selection, and intent initialization. |
-| `socratic_stage_inquiry` | Injects the Socratic inquiry protocol and rubric dimensions for any stage. |
-| `persona_product_agent` | Socratic Product Strategist (intent, empathy, boundaries, NFRs). |
-| `persona_architect_agent` | Socratic Systems Architect (trade-offs, failure modes, invariants, schemas). |
-| `persona_security_agent` | Staff Security Specialist (threat model, attack surface, secret hygiene). |
-| `persona_qa_agent` | Lead QA Engineer (edge cases, mutation/property testing, test evidence). |
-| `persona_devops_agent` | SRE & Operations Lead (rollback plan, observability, post-mortem reflection). |
+| `aidlc_start` | Workflow kickoff, scope selection, and intent initialization. |
+| `socratic_stage_inquiry` | Injects Socratic inquiry protocol and rubric dimensions for any stage. |
+| `persona_product_agent` | Socratic Product Strategist (intent, empathy, boundaries, user stories). |
+| `persona_architect_agent` | Principal Systems Architect (domain models, trade-offs, schemas, resilience). |
+| `persona_developer_agent` | Senior Software Engineer (reverse engineering, clean code, implementation). |
+| `persona_devsecops_agent` | DevSecOps Specialist (CI/CD pipelines, security automation, canary deployments). |
+| `persona_quality_agent` | Lead QA Engineer (edge cases, automated testing, performance benchmarks). |
+| `persona_tech_lead` | Engineering Tech Lead (Units of Work DAG, dependency sequencing, delivery plan). |
+| `persona_infra_agent` | Cloud Infrastructure Architect (IaC, provisioning, container definitions). |
+| `persona_observability_agent` | SRE Lead (tracing, telemetry, SLO alarms, incident runbooks). |
+| `persona_security_agent` | Application Security Specialist (threat modeling, attack surface, RBAC). |
+| `persona_business_analyst` | Business Analyst (market research, feasibility, resource constraints). |
+| `persona_coach_agent` | Agile Coach (team formation, architectural retrospectives, post-mortems). |
 
 ### Resources
 | URI | Description |
 |---|---|
 | `aidlc://state` | Live content of `./aidlc/.../aidlc-state.md`. |
 | `aidlc://active-intent` | JSON metadata of active intent. |
-| `aidlc://rubrics` | Complete catalog of Socratic rubrics and probing dimensions. |
+| `aidlc://rubrics` | Complete catalog of 33 stage rubrics and probing dimensions. |
+| `aidlc://scopes` | Scope routing matrix and stage sequences. |
+| `aidlc://knowledge` | Listing of team standards and reference documents. |
 
 ---
 
@@ -117,10 +146,10 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 User Intent
    │
    ▼
-dlc_init_intent ({ label: "auth-service", profile: "feature" })
+dlc_init_intent ({ label: "auth-service", scope: "feature", projectType: "auto" })
    │
    ▼
-Adopt Persona & Socratic Inquiry (Ask trade-offs, limits, non-goals)
+Adopt Persona & Socratic Inquiry (Trade-offs, limits, non-goals, failure modes)
    │
    ▼
 dlc_submit_draft ({ stageId: "intent-capture", content: "..." })
@@ -136,7 +165,7 @@ dlc_submit_draft ({ stageId: "intent-capture", content: "..." })
 dlc_approve_gate ({ notes: "Approved by tech lead" })
            │
            ▼
-Advances to Stage 2.1 (Requirements & User Stories)
+Advances to Stage 2.3 (Requirements Analysis)
 ```
 
 ---

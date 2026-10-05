@@ -32,7 +32,10 @@ export function formatAidlcStateMarkdown(state) {
         `# AI-DLC State: ${state.intentId}`,
         "",
         `**Label**: ${state.label}  `,
-        `**Profile**: \`${state.profile}\`  `,
+        `**Scope / Profile**: \`${state.profile}\`  `,
+        `**Project Type**: \`${state.projectType}\`  `,
+        `**Depth**: \`${state.depth}\`  `,
+        `**Test Strategy**: \`${state.testStrategy}\`  `,
         `**Status**: \`${state.status}\`  `,
         `**Current Stage**: ${stageName}  `,
         `**Updated At**: ${state.updatedAt}  `,
@@ -74,7 +77,10 @@ export async function scaffoldIntent(state, workspaceDir = getWorkspaceDir()) {
     await fs.writeFile(descPath, JSON.stringify({
         intentId: state.intentId,
         label: state.label,
-        profile: state.profile,
+        scope: state.profile,
+        projectType: state.projectType,
+        depth: state.depth,
+        testStrategy: state.testStrategy,
         description: state.description,
         createdAt: state.createdAt,
     }, null, 2), "utf-8");

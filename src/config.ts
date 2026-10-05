@@ -22,6 +22,14 @@ export function getIntentsDir(workspaceDir: string = getWorkspaceDir(), space: s
   return path.join(getSpaceDir(workspaceDir, space), "intents");
 }
 
+export function getKnowledgeDir(workspaceDir: string = getWorkspaceDir(), space: string = CONFIG.DEFAULT_SPACE): string {
+  return path.join(getSpaceDir(workspaceDir, space), "knowledge");
+}
+
+export function getKnowledgeDocumentsDir(workspaceDir: string = getWorkspaceDir(), space: string = CONFIG.DEFAULT_SPACE): string {
+  return path.join(getKnowledgeDir(workspaceDir, space), "documents");
+}
+
 export function getActiveIntentPointerPath(workspaceDir: string = getWorkspaceDir()): string {
   return path.join(getSpaceDir(workspaceDir), CONFIG.ACTIVE_INTENT_FILE);
 }

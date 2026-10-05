@@ -1,77 +1,305 @@
-import { ProfileType, ProjectType, StageDefinition, StageState } from "../types.js";
+import { ScopeType, ProjectType, DepthLevel, TestStrategy, StageState } from "../types.js";
 import { STAGE_DEFINITIONS } from "./socratic-rubric.js";
 
-export interface ProfileDefinition {
-  type: ProfileType;
+export interface ScopeDefinition {
+  type: ScopeType;
   name: string;
   description: string;
+  defaultDepth: DepthLevel;
+  defaultTestStrategy: TestStrategy;
   stageIds: string[];
 }
 
-export const PROFILES: Record<ProfileType, ProfileDefinition> = {
+export const SCOPES: Record<ScopeType, ScopeDefinition> = {
+  enterprise: {
+    type: "enterprise",
+    name: "Regulated Enterprise Feature",
+    description: "Full audit trail, compliance review, and production-grade operations across all 33 stages.",
+    defaultDepth: "comprehensive",
+    defaultTestStrategy: "comprehensive",
+    stageIds: [
+      "intent-capture",
+      "market-research",
+      "feasibility-constraints",
+      "scope-definition",
+      "team-formation",
+      "rough-mockups",
+      "approval-handoff",
+      "reverse-engineering",
+      "practices-discovery",
+      "requirements-analysis",
+      "user-stories",
+      "refined-mockups",
+      "domain-design",
+      "units-generation",
+      "contract-design",
+      "delivery-planning",
+      "functional-design",
+      "nfr-requirements",
+      "nfr-design",
+      "infrastructure-design",
+      "code-generation",
+      "build-and-test",
+      "ci-pipeline",
+      "deployment-pipeline",
+      "environment-provisioning",
+      "deployment-execution",
+      "observability-setup",
+      "incident-response",
+      "performance-validation",
+      "feedback-reflection",
+    ],
+  },
+
   feature: {
     type: "feature",
     name: "Standard Feature",
-    description: "Complete full-lifecycle feature development across all 6 phases with comprehensive verification and threat modeling.",
+    description: "Complete full-lifecycle feature development with standard artifact detail and testing across all phases.",
+    defaultDepth: "standard",
+    defaultTestStrategy: "standard",
     stageIds: [
       "intent-capture",
+      "market-research",
+      "feasibility-constraints",
+      "scope-definition",
+      "team-formation",
+      "rough-mockups",
+      "approval-handoff",
+      "reverse-engineering",
+      "practices-discovery",
       "requirements-analysis",
-      "architecture-design",
-      "threat-modeling",
-      "task-decomposition",
+      "user-stories",
+      "refined-mockups",
+      "domain-design",
+      "units-generation",
+      "contract-design",
+      "delivery-planning",
+      "functional-design",
+      "nfr-requirements",
+      "nfr-design",
+      "infrastructure-design",
       "code-generation",
-      "automated-testing",
-      "operation-readiness",
+      "build-and-test",
+      "ci-pipeline",
+      "deployment-pipeline",
+      "environment-provisioning",
+      "deployment-execution",
+      "observability-setup",
+      "incident-response",
+      "performance-validation",
+      "feedback-reflection",
     ],
   },
+
   mvp: {
     type: "mvp",
-    name: "MVP / Greenfield Prototype",
-    description: "Rapid end-to-end prototyping focusing on core architecture, implementation, and essential testing while deferring heavy ops.",
+    name: "Greenfield MVP",
+    description: "Rapid minimum viable product. Skips late-stage operations but retains full design and construction.",
+    defaultDepth: "standard",
+    defaultTestStrategy: "standard",
     stageIds: [
       "intent-capture",
+      "feasibility-constraints",
+      "scope-definition",
+      "rough-mockups",
+      "reverse-engineering",
+      "practices-discovery",
       "requirements-analysis",
-      "architecture-design",
-      "task-decomposition",
+      "user-stories",
+      "refined-mockups",
+      "domain-design",
+      "units-generation",
+      "contract-design",
+      "delivery-planning",
+      "functional-design",
+      "nfr-requirements",
+      "nfr-design",
+      "infrastructure-design",
       "code-generation",
-      "automated-testing",
+      "build-and-test",
+      "ci-pipeline",
     ],
   },
+
+  poc: {
+    type: "poc",
+    name: "Proof of Concept (PoC)",
+    description: "Prove feasibility fast. Skips most Ideation and Inception stages, focusing strictly on getting to verified code.",
+    defaultDepth: "minimal",
+    defaultTestStrategy: "minimal",
+    stageIds: [
+      "intent-capture",
+      "reverse-engineering",
+      "requirements-analysis",
+      "code-generation",
+      "build-and-test",
+    ],
+  },
+
   bugfix: {
     type: "bugfix",
     name: "Bugfix & Root Cause Remediation",
-    description: "Surgical problem diagnosis and regression fix. Skips ideation, focuses on root cause analysis, fix design, and regression testing.",
+    description: "Streamlined path from requirements analysis through code generation, test, and verified deployment.",
+    defaultDepth: "minimal",
+    defaultTestStrategy: "minimal",
     stageIds: [
+      "reverse-engineering",
       "requirements-analysis",
-      "architecture-design",
       "code-generation",
-      "automated-testing",
+      "build-and-test",
+      "deployment-pipeline",
+      "deployment-execution",
     ],
   },
+
+  refactor: {
+    type: "refactor",
+    name: "Code Refactoring",
+    description: "Clean up and restructure existing code without changing functionality, with verified deployment.",
+    defaultDepth: "minimal",
+    defaultTestStrategy: "minimal",
+    stageIds: [
+      "reverse-engineering",
+      "requirements-analysis",
+      "functional-design",
+      "code-generation",
+      "build-and-test",
+      "deployment-pipeline",
+      "deployment-execution",
+    ],
+  },
+
+  infra: {
+    type: "infra",
+    name: "Infrastructure Change",
+    description: "Focuses on cloud architecture, IaC, security, provisioning, and deployment pipelines.",
+    defaultDepth: "standard",
+    defaultTestStrategy: "standard",
+    stageIds: [
+      "practices-discovery",
+      "requirements-analysis",
+      "nfr-requirements",
+      "nfr-design",
+      "infrastructure-design",
+      "ci-pipeline",
+      "deployment-pipeline",
+      "environment-provisioning",
+      "deployment-execution",
+      "observability-setup",
+    ],
+  },
+
+  "security-patch": {
+    type: "security-patch",
+    name: "Security Vulnerability Patch",
+    description: "Fast-track response to CVEs or security flaws through security-relevant stages to production.",
+    defaultDepth: "minimal",
+    defaultTestStrategy: "minimal",
+    stageIds: [
+      "reverse-engineering",
+      "requirements-analysis",
+      "nfr-requirements",
+      "code-generation",
+      "build-and-test",
+      "deployment-pipeline",
+      "deployment-execution",
+    ],
+  },
+
+  classic: {
+    type: "classic",
+    name: "Classic V1 Lifecycle",
+    description: "V1-style ceremony: full Inception and Construction with advisory reviews, skipping Ideation and Operation.",
+    defaultDepth: "standard",
+    defaultTestStrategy: "standard",
+    stageIds: [
+      "reverse-engineering",
+      "practices-discovery",
+      "requirements-analysis",
+      "user-stories",
+      "refined-mockups",
+      "domain-design",
+      "units-generation",
+      "contract-design",
+      "delivery-planning",
+      "functional-design",
+      "nfr-requirements",
+      "nfr-design",
+      "infrastructure-design",
+      "code-generation",
+      "build-and-test",
+    ],
+  },
+
+  workshop: {
+    type: "workshop",
+    name: "Workshop / Training Lab",
+    description: "Facilitated full Inception-through-Operation lifecycle with a lighter, teaching-oriented test strategy.",
+    defaultDepth: "standard",
+    defaultTestStrategy: "minimal",
+    stageIds: [
+      "reverse-engineering",
+      "practices-discovery",
+      "requirements-analysis",
+      "user-stories",
+      "refined-mockups",
+      "domain-design",
+      "units-generation",
+      "contract-design",
+      "delivery-planning",
+      "functional-design",
+      "nfr-requirements",
+      "nfr-design",
+      "infrastructure-design",
+      "code-generation",
+      "build-and-test",
+      "ci-pipeline",
+      "deployment-pipeline",
+      "environment-provisioning",
+      "deployment-execution",
+      "observability-setup",
+      "incident-response",
+      "performance-validation",
+      "feedback-reflection",
+    ],
+  },
+
   express: {
     type: "express",
     name: "Express Iteration",
-    description: "Lightweight streamlined flow for straightforward code enhancements, updates, or maintenance tasks.",
+    description: "Lightest path: requirements through code and test to conditional deploy, with no design pass or reviewers.",
+    defaultDepth: "minimal",
+    defaultTestStrategy: "minimal",
     stageIds: [
+      "reverse-engineering",
       "requirements-analysis",
       "code-generation",
-      "automated-testing",
+      "build-and-test",
+      "deployment-pipeline",
+      "deployment-execution",
+      "observability-setup",
     ],
   },
 };
 
+// Backward-compatibility alias
+export const PROFILES = SCOPES;
+
 /**
- * Initializes the list of StageState objects for a given profile and project type.
- * If projectType is 'brownfield', injects 'reverse-engineering' before requirements analysis.
+ * Initializes the list of StageState objects for a given scope and project type.
+ * Greenfield projects skip reverse-engineering automatically.
  */
-export function createStagesForProfile(
-  profileType: ProfileType,
+export function createStagesForScope(
+  scopeType: ScopeType,
   projectType: ProjectType = "greenfield"
 ): StageState[] {
-  const profile = PROFILES[profileType] || PROFILES.feature;
-  const stageIds = [...profile.stageIds];
+  const scopeDef = SCOPES[scopeType] || SCOPES.feature;
+  let stageIds = [...scopeDef.stageIds];
 
-  if (projectType === "brownfield" && !stageIds.includes("reverse-engineering")) {
+  // If greenfield, remove reverse-engineering since there is no existing code to scan
+  if (projectType === "greenfield") {
+    stageIds = stageIds.filter((id) => id !== "reverse-engineering");
+  } else if (projectType === "brownfield" && !stageIds.includes("reverse-engineering")) {
     const reqIndex = stageIds.indexOf("requirements-analysis");
     if (reqIndex !== -1) {
       stageIds.splice(reqIndex, 0, "reverse-engineering");
@@ -96,3 +324,5 @@ export function createStagesForProfile(
   });
 }
 
+// Backward-compatibility alias
+export const createStagesForProfile = createStagesForScope;

@@ -1,26 +1,31 @@
-import { PROFILES, createStagesForProfile } from "./profiles.js";
+import { SCOPES, createStagesForScope } from "./profiles.js";
 import { STAGE_DEFINITIONS, evaluateRubric } from "./socratic-rubric.js";
-import { generateIntentId, scaffoldIntent, loadActiveIntentState, loadIntentState, persistIntentState, saveStageArtifact, } from "../utils/filesystem.js";
+import { generateIntentId, scaffoldIntent, loadActiveIntentState, loadIntentState, persistIntentState, saveStageArtifact, setActiveIntent, } from "../utils/filesystem.js";
 import { getWorkspaceDir } from "../config.js";
 export class DlcStateMachine {
     /**
-     * Initializes a new Intent with selected profile and scaffolds files.
+     * Initializes a new Intent with selected scope/profile, depth, and test strategy.
      */
     static async initIntent(params) {
         const ws = params.workspaceDir || getWorkspaceDir();
         const profile = params.profile || "feature";
         const projectType = params.projectType || "greenfield";
-        if (!PROFILES[profile]) {
-            throw new Error(`Invalid profile: '${profile}'. Supported profiles: ${Object.keys(PROFILES).join(", ")}`);
+        const scopeDef = SCOPES[profile];
+        if (!scopeDef) {
+            throw new Error(`Invalid scope/profile: '${profile}'. Supported scopes: ${Object.keys(SCOPES).join(", ")}`);
         }
+        const depth = params.depth || scopeDef.defaultDepth;
+        const testStrategy = params.testStrategy || scopeDef.defaultTestStrategy;
         const intentId = generateIntentId(params.label);
         const now = new Date().toISOString();
-        const stages = createStagesForProfile(profile, projectType);
+        const stages = createStagesForScope(profile, projectType);
         const intent = {
             intentId,
             label: params.label,
             profile,
             projectType,
+            depth,
+            testStrategy,
             description: params.description,
             createdAt: now,
             updatedAt: now,
@@ -30,6 +35,18 @@ export class DlcStateMachine {
         };
         const intentDir = await scaffoldIntent(intent, ws);
         return { intent, intentDir };
+    }
+    /**
+     * Switches the active intent.
+     */
+    static async switchIntent(intentId, workspaceDir) {
+        const ws = workspaceDir || getWorkspaceDir();
+        const intent = await loadIntentState(intentId, ws);
+        if (!intent) {
+            throw new Error(`Intent '${intentId}' not found in workspace.`);
+        }
+        await setActiveIntent(intentId, ws);
+        return intent;
     }
     /**
      * Gets current intent and active stage status.

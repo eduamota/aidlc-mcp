@@ -10,4 +10,6 @@ export declare const CONFIG: {
 export declare function getWorkspaceDir(): string;
 export declare function getSpaceDir(workspaceDir?: string, space?: string): string;
 export declare function getIntentsDir(workspaceDir?: string, space?: string): string;
+export declare function getKnowledgeDir(workspaceDir?: string, space?: string): string;
+export declare function getKnowledgeDocumentsDir(workspaceDir?: string, space?: string): string;
 export declare function getActiveIntentPointerPath(workspaceDir?: string): string;

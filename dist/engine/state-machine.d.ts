@@ -1,19 +1,25 @@
-import { IntentState, ProfileType, ProjectType, RubricEvaluationResult } from "../types.js";
+import { IntentState, ScopeType, ProjectType, DepthLevel, TestStrategy, RubricEvaluationResult } from "../types.js";
 import { STAGE_DEFINITIONS } from "./socratic-rubric.js";
 export declare class DlcStateMachine {
     /**
-     * Initializes a new Intent with selected profile and scaffolds files.
+     * Initializes a new Intent with selected scope/profile, depth, and test strategy.
      */
     static initIntent(params: {
         label: string;
         description: string;
-        profile?: ProfileType;
+        profile?: ScopeType;
         projectType?: ProjectType;
+        depth?: DepthLevel;
+        testStrategy?: TestStrategy;
         workspaceDir?: string;
     }): Promise<{
         intent: IntentState;
         intentDir: string;
     }>;
+    /**
+     * Switches the active intent.
+     */
+    static switchIntent(intentId: string, workspaceDir?: string): Promise<IntentState>;
     /**
      * Gets current intent and active stage status.
      */

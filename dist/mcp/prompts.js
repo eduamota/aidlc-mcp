@@ -1,35 +1,49 @@
 import { z } from "zod";
 import { STAGE_DEFINITIONS } from "../engine/socratic-rubric.js";
-import { PROFILES } from "../engine/profiles.js";
+import { SCOPES } from "../engine/profiles.js";
+const SCOPE_KEYS = [
+    "enterprise",
+    "feature",
+    "mvp",
+    "poc",
+    "bugfix",
+    "refactor",
+    "infra",
+    "security-patch",
+    "classic",
+    "workshop",
+    "express",
+];
 export function registerDlcPrompts(server) {
     // 1. aidlc_start
     server.registerPrompt("aidlc_start", {
         title: "Start AI-DLC Workflow",
-        description: "Initialize and kick off an AI-DLC workflow with Socratic inquiry and profile selection.",
+        description: "Initialize and kick off an AI-DLC workflow with Socratic inquiry and scope selection.",
         argsSchema: {
             intent: z.string().describe("What you want to build or achieve (e.g. 'Build REST API for inventory management')"),
-            profile: z
-                .enum(["feature", "mvp", "bugfix", "express"])
+            scope: z
+                .enum(SCOPE_KEYS)
                 .optional()
-                .describe("Workflow profile: feature (all phases), mvp (rapid prototype), bugfix, or express"),
+                .describe("Workflow scope profile: enterprise, feature, mvp, poc, bugfix, refactor, infra, security-patch, classic, workshop, express"),
         },
-    }, async ({ intent, profile }) => {
-        const selectedProfile = profile || "feature";
-        const profileDef = PROFILES[selectedProfile];
+    }, async ({ intent, scope }) => {
+        const selectedScope = scope || "feature";
+        const scopeDef = SCOPES[selectedScope];
         const text = [
             `You are the AI-DLC Orchestrator with an embedded Socratic inquiry engine.`,
             `The user wants to accomplish: "${intent}".`,
-            `Selected Profile: "${selectedProfile}" (${profileDef.name}).`,
+            `Selected Scope: "${selectedScope}" (${scopeDef.name}).`,
+            `Planned Stages: ${scopeDef.stageIds.length} stages across the lifecycle.`,
             "",
             `Your governing operating principles:`,
             `1. "You decide, AI executes." Every material decision goes through an approval gate.`,
-            `2. Do not skip straight to code. First call \`dlc_init_intent\` with a concise label and description.`,
+            `2. Do not skip straight to code. First run \`dlc_init_intent\` with a concise label, description, and scope.`,
             `3. Follow the Socratic method: Ask targeted, probing questions that force clarity on constraints, non-goals, failure modes, and edge cases.`,
             `4. Formulate the stage artifact only after probing the user.`,
             `5. Submit drafts via \`dlc_submit_draft\`. If the Socratic rubric is incomplete, continue the inquiry until all dimensions pass.`,
             `6. Always require explicit human approval before calling \`dlc_approve_gate\`.`,
             "",
-            `Begin by calling \`dlc_init_intent\` and initiating the Socratic interview for Stage 1.1!`,
+            `Begin by calling \`dlc_init_intent\` and initiating the interview for the first stage!`,
         ].join("\n");
         return {
             messages: [
@@ -43,9 +57,9 @@ export function registerDlcPrompts(server) {
     // 2. socratic_stage_inquiry
     server.registerPrompt("socratic_stage_inquiry", {
         title: "Socratic Stage Inquiry",
-        description: "Load the Socratic questioning protocol and rubric dimensions for the current or specified stage.",
+        description: "Load the Socratic questioning protocol and rubric dimensions for any lifecycle stage.",
         argsSchema: {
-            stageId: z.string().describe("Stage ID (e.g. 'intent-capture', 'requirements-analysis', 'architecture-design')"),
+            stageId: z.string().describe("Stage ID (e.g. 'intent-capture', 'requirements-analysis', 'domain-design')"),
         },
     }, async ({ stageId }) => {
         const stageDef = STAGE_DEFINITIONS[stageId];
@@ -93,7 +107,7 @@ export function registerDlcPrompts(server) {
             ],
         };
     });
-    // 3. Domain Expert Personas
+    // 3. The 11 AI-DLC Domain Expert Personas
     const personas = [
         {
             name: "persona_product_agent",
@@ -105,25 +119,61 @@ export function registerDlcPrompts(server) {
             name: "persona_architect_agent",
             title: "aidlc-architect-agent Persona",
             role: "Principal Systems Architect",
-            focus: "Trade-offs, rejected alternatives, failure blast radiuses, data schemas, invariants, and scalability boundaries.",
+            focus: "Domain modeling, trade-offs, rejected alternatives, failure blast radiuses, data schemas, invariants, and scalability boundaries.",
+        },
+        {
+            name: "persona_developer_agent",
+            title: "aidlc-developer-agent Persona",
+            role: "Senior Software Engineer",
+            focus: "Code pattern analysis, brownfield reverse engineering, functional design, clean code, and implementation.",
+        },
+        {
+            name: "persona_devsecops_agent",
+            title: "aidlc-devsecops-agent Persona",
+            role: "Staff DevSecOps & Security Automation Specialist",
+            focus: "CI/CD pipelines, automated security scanning, canary deployments, and deployment execution.",
+        },
+        {
+            name: "persona_quality_agent",
+            title: "aidlc-quality-agent Persona",
+            role: "Lead Quality & Test Engineer",
+            focus: "Property-based testing, boundary conditions, edge case coverage, performance profiling, and empirical test evidence.",
+        },
+        {
+            name: "persona_tech_lead",
+            title: "aidlc-tech-lead Persona",
+            role: "Engineering Tech Lead",
+            focus: "Units of Work DAG decomposition, dependency sequencing, risk mitigation, and delivery planning.",
+        },
+        {
+            name: "persona_infra_agent",
+            title: "aidlc-infra-agent Persona",
+            role: "Cloud Infrastructure Architect",
+            focus: "Infrastructure as Code (Terraform/CDK), cloud resource provisioning, container specs, and networking.",
+        },
+        {
+            name: "persona_observability_agent",
+            title: "aidlc-observability-agent Persona",
+            role: "Site Reliability & Observability Lead",
+            focus: "Distributed tracing, metrics, SLO/SLA alert thresholds, dashboards, runbooks, and incident triage.",
         },
         {
             name: "persona_security_agent",
             title: "aidlc-security-agent Persona",
-            role: "Staff Security Architect",
-            focus: "Trust boundaries, threat modeling, attack surfaces, PII/secret protection, and defense in depth.",
+            role: "Staff Application Security Specialist",
+            focus: "Threat modeling (STRIDE), attack surface analysis, trust boundaries, secret hygiene, and RBAC.",
         },
         {
-            name: "persona_qa_agent",
-            title: "aidlc-qa-agent Persona",
-            role: "Lead Quality & Test Engineer",
-            focus: "Property-based testing, boundary conditions, edge case coverage, and empirical test evidence.",
+            name: "persona_business_analyst",
+            title: "aidlc-business-analyst Persona",
+            role: "Business & Market Analyst",
+            focus: "Competitive landscape, market benchmarks, feasibility analysis, and resource/budget constraints.",
         },
         {
-            name: "persona_devops_agent",
-            title: "aidlc-devops-agent Persona",
-            role: "Site Reliability & Operations Lead",
-            focus: "Deployment risk, observability metrics/SLOs, rollback strategies, and architectural post-mortems.",
+            name: "persona_coach_agent",
+            title: "aidlc-coach-agent Persona",
+            role: "Lifecycle Coach & Agile Facilitator",
+            focus: "Team formation, continuous feedback, architectural retrospectives, technical debt tracking, and post-mortems.",
         },
     ];
     for (const p of personas) {

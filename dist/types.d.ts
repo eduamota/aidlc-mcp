@@ -1,6 +1,9 @@
-export type Phase = "initialization" | "ideation" | "inception" | "construction" | "verification" | "operation";
-export type ProfileType = "feature" | "mvp" | "bugfix" | "express";
+export type Phase = "initialization" | "ideation" | "inception" | "construction" | "operation";
+export type ScopeType = "enterprise" | "feature" | "mvp" | "poc" | "bugfix" | "refactor" | "infra" | "security-patch" | "classic" | "workshop" | "express";
+export type ProfileType = ScopeType;
 export type ProjectType = "greenfield" | "brownfield";
+export type DepthLevel = "comprehensive" | "standard" | "minimal";
+export type TestStrategy = "comprehensive" | "standard" | "minimal";
 export interface RubricDimension {
     id: string;
     title: string;
@@ -39,8 +42,10 @@ export interface StageState {
 export interface IntentState {
     intentId: string;
     label: string;
-    profile: ProfileType;
-    projectType?: ProjectType;
+    profile: ScopeType;
+    projectType: ProjectType;
+    depth: DepthLevel;
+    testStrategy: TestStrategy;
     description: string;
     createdAt: string;
     updatedAt: string;
@@ -62,4 +67,26 @@ export interface RubricEvaluationResult {
     dimensionResults: RubricDimensionResult[];
     unresolvedProbes: string[];
     feedback: string;
+}
+export interface KnowledgeDocument {
+    id: string;
+    filename: string;
+    relativePath: string;
+    category: "shared" | "agent" | "documentkb";
+    agent?: string;
+    sizeBytes: number;
+    updatedAt: string;
+    preview: string;
+}
+export interface DoctorCheck {
+    name: string;
+    status: "pass" | "warn" | "fail";
+    message: string;
+    details?: string;
+}
+export interface DoctorReport {
+    overallStatus: "healthy" | "warning" | "error";
+    workspaceDir: string;
+    activeSpace: string;
+    checks: DoctorCheck[];
 }

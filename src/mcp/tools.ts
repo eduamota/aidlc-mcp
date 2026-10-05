@@ -3,29 +3,89 @@ import { z } from "zod";
 import { DlcStateMachine } from "../engine/state-machine.js";
 import { evaluateRubric, STAGE_DEFINITIONS } from "../engine/socratic-rubric.js";
 import { listAllIntents } from "../utils/filesystem.js";
-import { PROFILES } from "../engine/profiles.js";
+import { SCOPES } from "../engine/profiles.js";
 import { scanWorkspaceForReverseEngineering } from "../utils/reverse-engineering.js";
+import { runDlcDoctor } from "../utils/doctor.js";
+import { addKnowledgeDocument, listKnowledgeDocuments, readKnowledgeDocument } from "../utils/knowledge.js";
+
+const SCOPE_ENUM = [
+  "enterprise",
+  "feature",
+  "mvp",
+  "poc",
+  "bugfix",
+  "refactor",
+  "infra",
+  "security-patch",
+  "classic",
+  "workshop",
+  "express",
+] as const;
 
 export function registerDlcTools(server: McpServer): void {
-  // 1. dlc_init_intent
+  // 1. dlc_doctor: System Health & Diagnostics
+  server.tool(
+    "dlc_doctor",
+    "Run comprehensive AI-DLC environment and workspace diagnostics (checks Node.js, Git, permissions, active space, and intent health).",
+    {},
+    async () => {
+      try {
+        const report = await runDlcDoctor();
+        const statusEmoji = report.overallStatus === "healthy" ? "✅" : report.overallStatus === "warning" ? "⚠️" : "❌";
+
+        const lines = [
+          `# ${statusEmoji} AI-DLC Doctor Diagnostic Report`,
+          `* **Overall Status**: \`${report.overallStatus.toUpperCase()}\``,
+          `* **Workspace**: \`${report.workspaceDir}\``,
+          `* **Active Space**: \`${report.activeSpace}\``,
+          "",
+          "## Diagnostic Checks:",
+        ];
+
+        for (const check of report.checks) {
+          const icon = check.status === "pass" ? "✅" : check.status === "warn" ? "⚠️" : "❌";
+          lines.push(`* ${icon} **${check.name}**: ${check.message}`);
+        }
+
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Doctor failed: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 2. dlc_init_intent: Scoped Lifecycle Initialization
   server.tool(
     "dlc_init_intent",
-    "Initialize a new AI-DLC intent with an adaptive workflow profile, scaffolding `./aidlc/spaces/default/intents/<date>-<label>/` and `aidlc-state.md`.",
+    "Initialize an AI-DLC intent with an adaptive workflow scope (enterprise, feature, mvp, poc, bugfix, refactor, infra, security-patch, classic, workshop, express), depth, and test strategy.",
     {
-      label: z.string().describe("Short hyphenated label for the intent (e.g. 'inventory-api', 'oauth-migration')"),
-      description: z.string().describe("Comprehensive description of the intent, objectives, and scope"),
-      profile: z
-        .enum(["feature", "mvp", "bugfix", "express"])
+      label: z.string().describe("Hyphenated label for the intent (e.g. 'inventory-api', 'auth-migration')"),
+      description: z.string().describe("Comprehensive description of what is being built or resolved"),
+      scope: z
+        .enum(SCOPE_ENUM)
         .optional()
         .default("feature")
-        .describe("Workflow profile: 'feature' (all 6 phases), 'mvp' (fast prototype), 'bugfix' (RCA & fix), 'express' (condensed)"),
+        .describe("Workflow scope profile: enterprise (33 stages), feature (33), mvp (23), poc (8), bugfix (9), refactor (10), infra (13), security-patch (10), classic (18), workshop (26), express (10)"),
+      depth: z
+        .enum(["comprehensive", "standard", "minimal"])
+        .optional()
+        .describe("Depth of documentation detail (defaults to scope default)"),
+      testStrategy: z
+        .enum(["comprehensive", "standard", "minimal"])
+        .optional()
+        .describe("Test coverage strategy (defaults to scope default)"),
       projectType: z
         .enum(["greenfield", "brownfield", "auto"])
         .optional()
         .default("auto")
-        .describe("Project type: 'greenfield' (new project), 'brownfield' (existing codebase, injects Reverse Engineering stage), or 'auto' (scans workspace automatically)"),
+        .describe("Project type: 'greenfield' (new project), 'brownfield' (existing code, injects reverse-engineering), or 'auto' (scans workspace automatically)"),
     },
-    async ({ label, description, profile, projectType }) => {
+    async ({ label, description, scope, depth, testStrategy, projectType }) => {
       try {
         let resolvedType: "greenfield" | "brownfield" = "greenfield";
         if (projectType === "auto") {
@@ -38,29 +98,34 @@ export function registerDlcTools(server: McpServer): void {
         const { intent, intentDir } = await DlcStateMachine.initIntent({
           label,
           description,
-          profile,
+          profile: scope,
           projectType: resolvedType,
+          depth,
+          testStrategy,
         });
 
         const activeStage = intent.stages[0];
         const stageDef = STAGE_DEFINITIONS[activeStage.id];
+        const scopeDef = SCOPES[intent.profile];
 
         const output = [
           `# AI-DLC Intent Initialized: ${intent.intentId}`,
           `📁 **Record Directory**: \`${intentDir}\``,
-          `🎯 **Profile**: \`${intent.profile}\` (${PROFILES[intent.profile].name})`,
-          `📋 **Total Stages**: ${intent.stages.length}`,
+          `🎯 **Scope**: \`${intent.profile}\` (${scopeDef.name})`,
+          `🔍 **Project Classification**: \`${intent.projectType}\``,
+          `📏 **Depth Level**: \`${intent.depth}\` | **Test Strategy**: \`${intent.testStrategy}\``,
+          `📋 **Planned Stages**: ${intent.stages.length}`,
           "",
           `### 🚀 Active Stage: ${activeStage.number} ${activeStage.name}`,
           `* **Phase**: \`${activeStage.phase}\``,
           `* **Domain Expert**: \`${stageDef?.persona || "aidlc-agent"}\``,
-          `* **Goal**: ${stageDef?.description}`,
+          `* **Objective**: ${stageDef?.description}`,
           "",
-          "### 🔍 Immediate Socratic Probes to Discuss:",
+          "### 🔍 Socratic Probes to Discuss:",
           ...(activeStage.unresolvedProbes || []).map((p) => `* ${p}`),
           "",
           "---",
-          "Next step: Act as the assigned domain persona. Probe the user on these dimensions before submitting the draft artifact with `dlc_submit_draft`.",
+          "Next: Adopt the assigned domain persona. Probe the user on these dimensions, draft the artifact, and submit via `dlc_submit_draft`.",
         ].join("\n");
 
         return {
@@ -75,12 +140,12 @@ export function registerDlcTools(server: McpServer): void {
     }
   );
 
-  // 2. dlc_get_status
+  // 3. dlc_get_status: Active Lifecycle Status
   server.tool(
     "dlc_get_status",
-    "Get the current status, active intent, current stage, gate readiness, and lingering Socratic probes.",
+    "Get the current status, active intent, current stage, gate readiness, and unresolved Socratic probes.",
     {
-      intentId: z.string().optional().describe("Optional specific intent ID. If omitted, uses active intent."),
+      intentId: z.string().optional().describe("Optional intent ID. Defaults to the active intent."),
     },
     async ({ intentId }) => {
       try {
@@ -111,8 +176,8 @@ export function registerDlcTools(server: McpServer): void {
         const output = [
           `# AI-DLC Status: ${intent.intentId}`,
           `* **Label**: ${intent.label}`,
-          `* **Profile**: \`${intent.profile}\``,
-          `* **Stage Progress**: ${intent.currentStageIndex + 1} of ${intent.stages.length}`,
+          `* **Scope**: \`${intent.profile}\` (${intent.depth} depth, ${intent.testStrategy} tests)`,
+          `* **Stage Progress**: Stage ${intent.currentStageIndex + 1} of ${intent.stages.length}`,
           "",
           `### Current Stage: ${activeStageState.number} ${activeStageState.name}`,
           `* **Phase**: \`${activeStageState.phase}\``,
@@ -122,7 +187,7 @@ export function registerDlcTools(server: McpServer): void {
           "",
           "### Gate Status:",
           activeStageState.status === "rubric_satisfied"
-            ? "✅ **Rubric Satisfied**: Ready for human gate approval (`dlc_approve_gate`)."
+            ? "✅ **Rubric Satisfied**: Ready for explicit human approval via `dlc_approve_gate`."
             : "⏳ **Rubric Incomplete**: Continue Socratic inquiry and update draft.",
           "",
           ...(activeStageState.unresolvedProbes && activeStageState.unresolvedProbes.length > 0
@@ -142,12 +207,232 @@ export function registerDlcTools(server: McpServer): void {
     }
   );
 
-  // 3. dlc_check_rubric
+  // 4. dlc_get_scope_matrix: Scope Routing Matrix
+  server.tool(
+    "dlc_get_scope_matrix",
+    "View the AI-DLC scope routing table comparing all 11 scopes, their stage counts, depth levels, and test strategies.",
+    {},
+    async () => {
+      const lines = [
+        "# AI-DLC Scope Routing Matrix",
+        "",
+        "| Scope | Stages | Default Depth | Default Test Strategy | Description |",
+        "|---|---|---|---|---|",
+      ];
+
+      for (const [key, s] of Object.entries(SCOPES)) {
+        lines.push(`| \`${key}\` | ${s.stageIds.length} | ${s.defaultDepth} | ${s.defaultTestStrategy} | ${s.description} |`);
+      }
+
+      lines.push("");
+      lines.push("Select any scope when calling `dlc_init_intent({ scope: '...' })`.");
+
+      return {
+        content: [{ type: "text", text: lines.join("\n") }],
+      };
+    }
+  );
+
+  // 5. dlc_switch_intent: Switch Active Intent
+  server.tool(
+    "dlc_switch_intent",
+    "Switch the workspace active intent to another existing intent.",
+    {
+      intentId: z.string().describe("The intent ID to activate (e.g. '261005-inventory-api')"),
+    },
+    async ({ intentId }) => {
+      try {
+        const intent = await DlcStateMachine.switchIntent(intentId);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Switched active intent to **${intent.intentId}** (${intent.label}, scope: \`${intent.profile}\`, current stage: ${intent.currentStageIndex + 1}/${intent.stages.length}).`,
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to switch intent: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 6. dlc_scan_workspace: Brownfield Code Discovery
+  server.tool(
+    "dlc_scan_workspace",
+    "Scan the workspace for brownfield reverse engineering: detects runtimes, manifests, key directories, dependencies, and generates the baseline reverse-engineering documentation.",
+    {
+      autoSave: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("If true, automatically saves the generated discovery report as reverse-engineering.md for the active intent."),
+      intentId: z.string().optional().describe("Optional intent ID."),
+    },
+    async ({ autoSave, intentId }) => {
+      try {
+        const scan = await scanWorkspaceForReverseEngineering();
+
+        let saveNotice = "";
+        if (autoSave) {
+          try {
+            const sub = await DlcStateMachine.submitDraft({
+              stageId: "reverse-engineering",
+              artifactName: "reverse-engineering.md",
+              content: scan.draftDocument,
+              intentId,
+            });
+            saveNotice = `\n\n✅ **Auto-saved Artifact**: \`${sub.artifactPath}\` (Rubric satisfied: ${sub.evaluation.satisfied ? "Yes" : "No"})`;
+          } catch (err: any) {
+            saveNotice = `\n\n⚠️ Could not auto-save: ${err.message}`;
+          }
+        }
+
+        const lines = [
+          `# Workspace Discovery & Reverse Engineering Scan`,
+          `* **Classification**: \`${scan.projectType}\``,
+          `* **Runtimes**: ${scan.detectedRuntimes.length > 0 ? scan.detectedRuntimes.join(", ") : "None detected"}`,
+          `* **Manifests**: ${scan.manifests.length > 0 ? scan.manifests.join(", ") : "None"}`,
+          `* **Source Directories**: ${scan.keyDirectories.length > 0 ? scan.keyDirectories.join(", ") : "None"}`,
+          `* **Dependencies**: ${scan.dependencies.length > 0 ? scan.dependencies.slice(0, 10).join(", ") : "Minimal"}`,
+          saveNotice,
+          "",
+          "## Generated Reverse Engineering Baseline Document:",
+          "```markdown",
+          scan.draftDocument,
+          "```",
+        ];
+
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Workspace scan failed: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 7. dlc_knowledge_add: Add Document to Two-Tier Knowledge Base
+  server.tool(
+    "dlc_knowledge_add",
+    "Add or import a reference document (PRD, vision doc, architecture standard, or security policy) into the active space's knowledge base (`aidlc/spaces/default/knowledge/`).",
+    {
+      filename: z.string().describe("Filename to save as (e.g. 'vision.md', 'company-architecture-standards.md')"),
+      content: z.string().describe("Full markdown or text content of the document"),
+      category: z
+        .enum(["shared", "agent", "documentkb"])
+        .optional()
+        .default("documentkb")
+        .describe("Category: 'shared' (team-wide standard), 'agent' (agent-specific methodology), or 'documentkb' (intent reference document)"),
+      agent: z.string().optional().describe("Agent persona name if category is 'agent' (e.g. 'aidlc-architect-agent')"),
+    },
+    async ({ filename, content, category, agent }) => {
+      try {
+        const doc = await addKnowledgeDocument({ filename, content, category, agent });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Added knowledge document **${doc.filename}** at \`${doc.relativePath}\` (${doc.sizeBytes} bytes, category: \`${doc.category}\`).`,
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to add knowledge document: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 8. dlc_knowledge_list: List Knowledge Documents
+  server.tool(
+    "dlc_knowledge_list",
+    "List all available knowledge documents, standards, and references in the active space.",
+    {},
+    async () => {
+      try {
+        const docs = await listKnowledgeDocuments();
+        if (docs.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Knowledge base is currently empty. Use `dlc_knowledge_add` to add PRDs, architectural standards, or policy documents.",
+              },
+            ],
+          };
+        }
+
+        const lines = [
+          `# Knowledge Base Documents (${docs.length})`,
+          "| Document | Category | Size | Path |",
+          "|---|---|---|---|",
+        ];
+
+        for (const d of docs) {
+          lines.push(`| **${d.filename}** | \`${d.category}\` | ${d.sizeBytes} B | \`${d.relativePath}\` |`);
+        }
+
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to list knowledge: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 9. dlc_knowledge_read: Read Knowledge Document
+  server.tool(
+    "dlc_knowledge_read",
+    "Read the full contents of a knowledge base document by its filename or ID.",
+    {
+      identifier: z.string().describe("Filename or document ID (e.g. 'vision.md' or 'vision')"),
+    },
+    async ({ identifier }) => {
+      try {
+        const doc = await readKnowledgeDocument(identifier);
+        if (!doc) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: `Knowledge document '${identifier}' not found.` }],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `# Knowledge Document: ${doc.filename}\nPath: \`${doc.relativePath}\`\n\n${doc.content}`,
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to read knowledge: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 10. dlc_check_rubric: Test Content against Socratic Rubric
   server.tool(
     "dlc_check_rubric",
     "Pre-evaluate draft content against a stage's Socratic rubric without saving to disk, discovering remaining probes and gaps.",
     {
-      stageId: z.string().optional().describe("Stage ID (e.g. 'intent-capture', 'requirements-analysis', 'architecture-design'). Defaults to active stage."),
+      stageId: z.string().optional().describe("Stage ID (e.g. 'intent-capture', 'requirements-analysis', 'domain-design'). Defaults to active stage."),
       content: z.string().describe("Draft markdown or text content to evaluate against the rubric."),
       intentId: z.string().optional().describe("Optional intent ID."),
     },
@@ -201,7 +486,7 @@ export function registerDlcTools(server: McpServer): void {
     }
   );
 
-  // 4. dlc_submit_draft
+  // 11. dlc_submit_draft: Save Stage Artifact & Evaluate Rubric
   server.tool(
     "dlc_submit_draft",
     "Submit and save a stage draft artifact to disk, validating it against the Socratic rubric and updating stage gate state.",
@@ -260,7 +545,7 @@ export function registerDlcTools(server: McpServer): void {
     }
   );
 
-  // 5. dlc_approve_gate
+  // 12. dlc_approve_gate: Approval Gate Transition
   server.tool(
     "dlc_approve_gate",
     "Approve the stage gate after human verification and rubric satisfaction, advancing the workflow to the next lifecycle stage.",
@@ -281,11 +566,11 @@ export function registerDlcTools(server: McpServer): void {
 
         const lines = [
           `# Gate Approved: Stage '${result.previousStageId}'`,
-          `**Status**: ${result.workflowComplete ? "🎉 Workflow Complete!" : `Advanced to Stage '${result.nextStageId}'`}`,
+          `**Status**: ${result.workflowComplete ? "🎉 Full AI-DLC Workflow Complete!" : `Advanced to Stage '${result.nextStageId}'`}`,
           `**Notes**: ${notes || "Approved by user"}`,
           "",
           result.workflowComplete
-            ? "All stages across the AI-DLC lifecycle are complete! Review the final artifacts under the intent directory."
+            ? "All stages across the lifecycle are complete! Review the final artifacts under the intent directory."
             : `Next: Load prompt or persona for stage '${result.nextStageId}' and begin Socratic inquiry.`,
         ];
 
@@ -301,7 +586,7 @@ export function registerDlcTools(server: McpServer): void {
     }
   );
 
-  // 6. dlc_list_intents
+  // 13. dlc_list_intents: List Tracked Intents
   server.tool("dlc_list_intents", "List all AI-DLC intents tracked in the current workspace.", {}, async () => {
     try {
       const intents = await listAllIntents();
@@ -327,7 +612,7 @@ export function registerDlcTools(server: McpServer): void {
     }
   });
 
-  // 7. dlc_get_setup_requirements
+  // 14. dlc_get_setup_requirements: Setup & Client Config Guides
   server.tool(
     "dlc_get_setup_requirements",
     "Retrieve the exact system requirements, environment prerequisites, and step-by-step setup instructions for AI-DLC Socratic MCP across different AI assistants (Claude Code, Cursor, Codex, Claude Desktop).",
@@ -364,10 +649,6 @@ export function registerDlcTools(server: McpServer): void {
           "```bash",
           "claude mcp add aidlc -- npx -y github:doitintl/aidlc-mcp",
           "```",
-          "*Alternative (Local clone)*:",
-          "```bash",
-          "claude mcp add aidlc -- node /absolute/path/to/aidlc-mcp/dist/index.js",
-          "```",
         ].join("\n"),
 
         "cursor": [
@@ -388,8 +669,6 @@ export function registerDlcTools(server: McpServer): void {
         "claude-desktop": [
           "## 3. Claude Desktop Setup",
           "Add to `claude_desktop_config.json`:",
-          "- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`",
-          "- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`",
           "```json",
           "{",
           '  "mcpServers": {',
@@ -441,11 +720,12 @@ export function registerDlcTools(server: McpServer): void {
 
       sections.push(
         "## 4. Verification & First Steps",
-        "1. **Check Connection**: Invoke tool `dlc_list_intents` in your AI chat. If connected, it will return the intents in your workspace.",
-        "2. **Start a Workflow**: Use prompt `aidlc_start` or call `dlc_init_intent({ label: 'my-feature', profile: 'feature', description: '...' })`.",
-        "3. **Socratic Dialogue**: The assistant will adopt the domain persona and interrogate unstated assumptions, boundaries, and failure modes.",
-        "4. **Rubric Review**: Call `dlc_submit_draft({ content: '...' })`. The server checks the stage's Socratic rubric.",
-        "5. **Gate Approval**: Once satisfied, explicit sign-off enables `dlc_approve_gate` to advance the stage."
+        "1. **Diagnostics**: Call `dlc_doctor` to verify your environment.",
+        "2. **Check Matrix**: Call `dlc_get_scope_matrix` to review available scopes.",
+        "3. **Start Workflow**: Call `dlc_init_intent({ label: 'my-feature', scope: 'feature', description: '...' })`.",
+        "4. **Socratic Inquiry**: Probe unstated assumptions and edge cases.",
+        "5. **Submit Draft**: Call `dlc_submit_draft({ content: '...' })` to check the stage rubric.",
+        "6. **Gate Approval**: Explicit human sign-off enables `dlc_approve_gate` to advance the stage."
       );
 
       return {
@@ -453,64 +733,4 @@ export function registerDlcTools(server: McpServer): void {
       };
     }
   );
-
-  // 8. dlc_scan_workspace
-  server.tool(
-    "dlc_scan_workspace",
-    "Scan the current workspace for brownfield reverse engineering, detecting runtimes, manifests, key directories, dependencies, and generating the baseline reverse-engineering documentation.",
-    {
-      autoSave: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe("If true, automatically saves the generated discovery report as reverse-engineering.md for the active intent."),
-      intentId: z.string().optional().describe("Optional intent ID."),
-    },
-    async ({ autoSave, intentId }) => {
-      try {
-        const scan = await scanWorkspaceForReverseEngineering();
-
-        let saveNotice = "";
-        if (autoSave) {
-          try {
-            const sub = await DlcStateMachine.submitDraft({
-              stageId: "reverse-engineering",
-              artifactName: "reverse-engineering.md",
-              content: scan.draftDocument,
-              intentId,
-            });
-            saveNotice = `\n\n✅ **Auto-saved Artifact**: \`${sub.artifactPath}\` (Rubric satisfied: ${sub.evaluation.satisfied ? "Yes" : "No"})`;
-          } catch (err: any) {
-            saveNotice = `\n\n⚠️ Could not auto-save: ${err.message}`;
-          }
-        }
-
-        const lines = [
-          `# Workspace Discovery & Reverse Engineering Scan`,
-          `* **Classification**: \`${scan.projectType}\``,
-          `* **Runtimes**: ${scan.detectedRuntimes.length > 0 ? scan.detectedRuntimes.join(", ") : "None detected"}`,
-          `* **Manifests**: ${scan.manifests.length > 0 ? scan.manifests.join(", ") : "None"}`,
-          `* **Source Directories**: ${scan.keyDirectories.length > 0 ? scan.keyDirectories.join(", ") : "None"}`,
-          `* **Dependencies**: ${scan.dependencies.length > 0 ? scan.dependencies.slice(0, 10).join(", ") : "Minimal"}`,
-          saveNotice,
-          "",
-          "## Generated Reverse Engineering Baseline Document:",
-          "```markdown",
-          scan.draftDocument,
-          "```",
-        ];
-
-        return {
-          content: [{ type: "text", text: lines.join("\n") }],
-        };
-      } catch (err: any) {
-        return {
-          isError: true,
-          content: [{ type: "text", text: `Workspace scan failed: ${err.message}` }],
-        };
-      }
-    }
-  );
 }
-
-
