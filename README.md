@@ -25,42 +25,55 @@ It enforces disciplined, verifiable software delivery for AI coding assistants (
 
 ---
 
+---
+
 ## 🚀 Quick Start
 
-### 1. Build the Server
+### Option A: Direct from GitHub URL (No Cloning Required!)
+
+You can run this MCP server directly from GitHub without cloning or manual building:
+
+#### 1. Claude Code CLI
 ```bash
-git clone <repo-url> ai-dlc-mcp
-cd ai-dlc-mcp
+claude mcp add aidlc -- npx -y github:doitintl/aidlc-mcp
+```
+
+#### 2. Claude Desktop (`claude_desktop_config.json`)
+```json
+{
+  "mcpServers": {
+    "aidlc": {
+      "command": "npx",
+      "args": ["-y", "github:doitintl/aidlc-mcp"]
+    }
+  }
+}
+```
+
+#### 3. Cursor (`.cursor/mcp.json`)
+```json
+{
+  "mcpServers": {
+    "aidlc": {
+      "command": "npx",
+      "args": ["-y", "github:doitintl/aidlc-mcp"]
+    }
+  }
+}
+```
+
+---
+
+### Option B: Local Clone & Build
+
+```bash
+git clone git@github.com:doitintl/aidlc-mcp.git
+cd aidlc-mcp
 npm install
 npm run build
 ```
+Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 
-### 2. Configure Your AI Client
-
-#### Claude Code / Claude Desktop
-Add to your `claude_desktop_config.json` or `.claude/config.json`:
-```json
-{
-  "mcpServers": {
-    "aidlc": {
-      "command": "node",
-      "args": ["/absolute/path/to/ai-dlc-mcp/dist/index.js"]
-    }
-  }
-}
-```
-
-#### Cursor (`.cursor/mcp.json`)
-```json
-{
-  "mcpServers": {
-    "aidlc": {
-      "command": "node",
-      "args": ["/absolute/path/to/ai-dlc-mcp/dist/index.js"]
-    }
-  }
-}
-```
 
 ---
 
