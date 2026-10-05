@@ -88,6 +88,7 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `dlc_submit_draft` | Save stage artifact markdown and evaluate rubric satisfaction. |
 | `dlc_approve_gate` | Confirm human sign-off and advance the state machine to the next stage. |
 | `dlc_list_intents` | List all tracked intents in the workspace. |
+| `dlc_get_setup_requirements` | Retrieve exact system requirements, environment prerequisites, and setup guides. |
 
 ### Prompts
 | Prompt | Description |

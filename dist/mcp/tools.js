@@ -265,5 +265,112 @@ export function registerDlcTools(server) {
             };
         }
     });
+    // 7. dlc_get_setup_requirements
+    server.tool("dlc_get_setup_requirements", "Retrieve the exact system requirements, environment prerequisites, and step-by-step setup instructions for AI-DLC Socratic MCP across different AI assistants (Claude Code, Cursor, Codex, Claude Desktop).", {
+        client: z
+            .enum(["all", "claude-code", "cursor", "claude-desktop", "codex", "generic"])
+            .optional()
+            .default("all")
+            .describe("Target AI client / harness to get specific instructions for (default: 'all')"),
+    }, async ({ client }) => {
+        const selected = client || "all";
+        const sections = [
+            "# AI-DLC Socratic MCP: Setup & Environment Requirements",
+            "",
+            "## 1. System Prerequisites",
+            "- **Node.js**: v18.0.0 or newer (Node 20+ LTS recommended). Verify with `node -v`.",
+            "- **npm / npx**: v9.0.0 or newer. Verify with `npx -v`.",
+            "- **Git**: Installed and available in PATH. Verify with `git --version`.",
+            "- **Filesystem Permissions**: Full read/write access in your project root.",
+            "- **Internet Access**: Required on initial run to download package dependencies if using `npx`.",
+            "",
+            "## 2. Workspace & Environment Configuration",
+            "- **Default Workspace Directory**: By default, the server anchors to the working directory (`process.cwd()`) where your AI assistant launches.",
+            "- **Custom Workspace Path (`AIDLC_WORKSPACE`)**: If your assistant runs in a separate directory from your project, set the `AIDLC_WORKSPACE` environment variable to your project's absolute path.",
+            "- **Generated Artifact Directory**: The server will create and manage `./aidlc/spaces/default/intents/` inside that workspace.",
+            "",
+        ];
+        const clientConfigs = {
+            "claude-code": [
+                "## 3. Claude Code CLI Setup",
+                "Run this single command in your terminal to register the MCP server:",
+                "```bash",
+                "claude mcp add aidlc -- npx -y github:doitintl/aidlc-mcp",
+                "```",
+                "*Alternative (Local clone)*:",
+                "```bash",
+                "claude mcp add aidlc -- node /absolute/path/to/aidlc-mcp/dist/index.js",
+                "```",
+            ].join("\n"),
+            "cursor": [
+                "## 3. Cursor Setup",
+                "Add to your project's `.cursor/mcp.json` or Cursor Global MCP Settings:",
+                "```json",
+                "{",
+                '  "mcpServers": {',
+                '    "aidlc": {',
+                '      "command": "npx",',
+                '      "args": ["-y", "github:doitintl/aidlc-mcp"]',
+                "    }",
+                "  }",
+                "}",
+                "```",
+            ].join("\n"),
+            "claude-desktop": [
+                "## 3. Claude Desktop Setup",
+                "Add to `claude_desktop_config.json`:",
+                "- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`",
+                "- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`",
+                "```json",
+                "{",
+                '  "mcpServers": {',
+                '    "aidlc": {',
+                '      "command": "npx",',
+                '      "args": ["-y", "github:doitintl/aidlc-mcp"]',
+                "    }",
+                "  }",
+                "}",
+                "```",
+            ].join("\n"),
+            "codex": [
+                "## 3. Codex CLI Setup",
+                "Configure in your Codex MCP configuration file:",
+                "```json",
+                "{",
+                '  "mcpServers": {',
+                '    "aidlc": {',
+                '      "command": "npx",',
+                '      "args": ["-y", "github:doitintl/aidlc-mcp"]',
+                "    }",
+                "  }",
+                "}",
+                "```",
+            ].join("\n"),
+            "generic": [
+                "## 3. Generic Stdio MCP Host Setup",
+                "- **Command**: `npx`",
+                '- **Args**: `["-y", "github:doitintl/aidlc-mcp"]`',
+                "- **Transport**: `stdio` (JSON-RPC over stdin/stdout, stderr for logs)",
+            ].join("\n"),
+        };
+        if (selected === "all") {
+            sections.push(clientConfigs["claude-code"]);
+            sections.push("");
+            sections.push(clientConfigs["cursor"]);
+            sections.push("");
+            sections.push(clientConfigs["claude-desktop"]);
+            sections.push("");
+            sections.push(clientConfigs["codex"]);
+            sections.push("");
+        }
+        else if (clientConfigs[selected]) {
+            sections.push(clientConfigs[selected]);
+            sections.push("");
+        }
+        sections.push("## 4. Verification & First Steps", "1. **Check Connection**: Invoke tool `dlc_list_intents` in your AI chat. If connected, it will return the intents in your workspace.", "2. **Start a Workflow**: Use prompt `aidlc_start` or call `dlc_init_intent({ label: 'my-feature', profile: 'feature', description: '...' })`.", "3. **Socratic Dialogue**: The assistant will adopt the domain persona and interrogate unstated assumptions, boundaries, and failure modes.", "4. **Rubric Review**: Call `dlc_submit_draft({ content: '...' })`. The server checks the stage's Socratic rubric.", "5. **Gate Approval**: Once satisfied, explicit sign-off enables `dlc_approve_gate` to advance the stage.");
+        return {
+            content: [{ type: "text", text: sections.join("\n") }],
+        };
+    });
 }
 //# sourceMappingURL=tools.js.map
