@@ -111,6 +111,9 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `dlc_approve_gate` | Confirm human sign-off and advance the state machine to the next stage. |
 | `dlc_list_intents` | List all tracked intents in the workspace. |
 | `dlc_get_setup_requirements` | Retrieve system prerequisites, environment setup, and client configs. |
+| `dlc_log_decision` | Log non-gate architectural & technical trade-offs into `decisions.json` (§2). |
+| `dlc_request_review` | Dispatch independent reviewer verification pass (§12a) with structured verdicts. |
+| `dlc_reopen_stage` | Reopen a previous stage back to `in_progress` (Recovery Protocol), preserving files. |
 
 ### Prompts
 | Prompt | Description |
@@ -137,6 +140,10 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `aidlc://rubrics` | Complete catalog of 33 stage rubrics and probing dimensions. |
 | `aidlc://scopes` | Scope routing matrix and stage sequences. |
 | `aidlc://knowledge` | Listing of team standards and reference documents. |
+| `aidlc://protocols/stage-protocol` | Voice contract, HARD STOP approval gate rules, atomic stage ritual. |
+| `aidlc://protocols/reviewer-protocol` | Independent reviewer invocation protocol (§12a) and verdict schema. |
+| `aidlc://protocols/construction-protocol` | Units of Work (UoW) DAG execution, Plan Approval, build-and-test loopback. |
+| `aidlc://protocols/recovery-protocol` | Session resumption and stage reopening without data loss. |
 
 ---
 

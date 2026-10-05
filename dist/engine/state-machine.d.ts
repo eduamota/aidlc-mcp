@@ -60,4 +60,46 @@ export declare class DlcStateMachine {
         workflowComplete: boolean;
         message: string;
     }>;
+    /**
+     * Logs a non-gate structured decision made during Socratic interview (§2).
+     */
+    static logDecision(params: {
+        stageId?: string;
+        decision: string;
+        rationale: string;
+        optionsConsidered?: string[];
+        intentId?: string;
+        workspaceDir?: string;
+    }): Promise<{
+        logged: boolean;
+        count: number;
+    }>;
+    /**
+     * Dispatches independent reviewer verification according to §12a.
+     */
+    static requestReview(params: {
+        stageId?: string;
+        reviewer?: string;
+        intentId?: string;
+        workspaceDir?: string;
+    }): Promise<{
+        stageId: string;
+        reviewer: string;
+        verdict: "APPROVED" | "REVISE" | "ADVISORY";
+        findings: string[];
+        reviewSummary: string;
+    }>;
+    /**
+     * Reopens a stage according to Recovery Protocol.
+     */
+    static reopenStage(params: {
+        stageId: string;
+        reason?: string;
+        intentId?: string;
+        workspaceDir?: string;
+    }): Promise<{
+        success: boolean;
+        reopenedStageId: string;
+        message: string;
+    }>;
 }

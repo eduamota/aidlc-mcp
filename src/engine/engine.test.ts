@@ -8,6 +8,12 @@ import { evaluateRubric } from "./socratic-rubric.js";
 import { SCOPES, createStagesForScope } from "./profiles.js";
 import { runDlcDoctor } from "../utils/doctor.js";
 import { addKnowledgeDocument, listKnowledgeDocuments, readKnowledgeDocument } from "../utils/knowledge.js";
+import {
+  STAGE_PROTOCOL,
+  REVIEWER_PROTOCOL,
+  CONSTRUCTION_PROTOCOL,
+  RECOVERY_PROTOCOL,
+} from "./protocols.js";
 
 test("Socratic Rubric Evaluation", () => {
   // 1. Incomplete draft
@@ -176,3 +182,92 @@ test("AI-DLC Doctor Diagnostics", async () => {
   assert.ok(nodeCheck);
   assert.equal(nodeCheck.status, "pass");
 });
+
+test("AI-DLC Protocols: Decisions, Reviews, and Recovery Reopening", async () => {
+  const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-proto-"));
+
+  try {
+    // 1. Verify protocol texts contain key instructions
+    assert.ok(STAGE_PROTOCOL.includes("Voice Contract"));
+    assert.ok(STAGE_PROTOCOL.includes("Approval Gate Rules (HARD STOP)"));
+    assert.ok(REVIEWER_PROTOCOL.includes("Reviewer Invocation Protocol (§12a)"));
+    assert.ok(CONSTRUCTION_PROTOCOL.includes("Units of Work (UoW) Execution"));
+    assert.ok(RECOVERY_PROTOCOL.includes("Re-opening a Stage"));
+
+    // 2. Initialize an intent
+    const { intent } = await DlcStateMachine.initIntent({
+      label: "protocol-demo",
+      description: "Demonstrating protocols",
+      profile: "express",
+      workspaceDir: tempWs,
+    });
+
+    // 3. Log a non-gate decision (§2)
+    const decRes = await DlcStateMachine.logDecision({
+      stageId: "requirements-analysis",
+      decision: "Use JWT tokens over session cookies",
+      rationale: "Stateless verification enables horizontal scaling with zero DB lookups.",
+      optionsConsidered: ["Session cookies with Redis", "API Keys"],
+      workspaceDir: tempWs,
+    });
+    assert.equal(decRes.logged, true);
+    assert.equal(decRes.count, 1);
+
+    // 4. Submit artifact and request independent review (§12a)
+    const validDraft = `
+# Requirements Analysis: Protocol Demo
+
+## Functional Requirements
+- System authenticates client using JWT.
+- System validates claims with public key.
+
+## Edge Cases and Limits
+- Expired token returns 401 Unauthorized.
+- Malformed header returns 400 Bad Request.
+
+## Non-Functional Requirements (NFRs)
+- Latency under 5ms per verification.
+- Scale to 10k RPS.
+    `;
+
+    await DlcStateMachine.submitDraft({
+      content: validDraft,
+      workspaceDir: tempWs,
+    });
+
+    const review = await DlcStateMachine.requestReview({
+      stageId: "requirements-analysis",
+      reviewer: "aidlc-security-reviewer-agent",
+      workspaceDir: tempWs,
+    });
+
+    assert.equal(review.verdict, "APPROVED");
+    assert.equal(review.reviewer, "aidlc-security-reviewer-agent");
+    assert.ok(review.findings.length > 0);
+
+    // 5. Approve gate to move to stage 2
+    await DlcStateMachine.approveGate({
+      notes: "Stage 1 approved with passing review",
+      workspaceDir: tempWs,
+    });
+
+    const statusAfterApprove = await DlcStateMachine.getStatus(undefined, tempWs);
+    assert.equal(statusAfterApprove.activeStageState?.id, "code-generation");
+
+    // 6. Test Recovery Protocol: Reopen Stage 1
+    const reopen = await DlcStateMachine.reopenStage({
+      stageId: "requirements-analysis",
+      reason: "Need to add OAuth refresh token flow",
+      workspaceDir: tempWs,
+    });
+    assert.equal(reopen.success, true);
+    assert.equal(reopen.reopenedStageId, "requirements-analysis");
+
+    const statusAfterReopen = await DlcStateMachine.getStatus(undefined, tempWs);
+    assert.equal(statusAfterReopen.activeStageState?.id, "requirements-analysis");
+    assert.equal(statusAfterReopen.activeStageState?.status, "in_progress");
+  } finally {
+    await fs.rm(tempWs, { recursive: true, force: true });
+  }
+});
+

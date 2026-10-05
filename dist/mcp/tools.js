@@ -617,5 +617,98 @@ export function registerDlcTools(server) {
             content: [{ type: "text", text: sections.join("\n") }],
         };
     });
+    // 15. dlc_log_decision: Protocol Non-Gate Decision Logger (§2)
+    server.tool("dlc_log_decision", "Log a non-gate architectural, technical, or trade-off decision into decisions.json (§2 Stage Protocol).", {
+        decision: z.string().describe("Clear summary of the decision reached"),
+        rationale: z.string().describe("Why this decision was chosen over alternatives"),
+        optionsConsidered: z.array(z.string()).optional().describe("Alternative approaches considered"),
+        stageId: z.string().optional().describe("Associated stage ID. Defaults to active stage."),
+        intentId: z.string().optional().describe("Optional intent ID."),
+    }, async ({ decision, rationale, optionsConsidered, stageId, intentId }) => {
+        try {
+            const result = await DlcStateMachine.logDecision({
+                decision,
+                rationale,
+                optionsConsidered,
+                stageId,
+                intentId,
+            });
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Recorded decision into \`decisions.json\` (Total recorded: ${result.count}).\n* **Decision**: ${decision}\n* **Rationale**: ${rationale}`,
+                    },
+                ],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Failed to log decision: ${err.message}` }],
+            };
+        }
+    });
+    // 16. dlc_request_review: Independent Reviewer Invocation (§12a)
+    server.tool("dlc_request_review", "Dispatch an independent verification pass (§12a Reviewer Protocol) on a submitted stage artifact before gate presentation.", {
+        stageId: z.string().optional().describe("Stage ID to review. Defaults to active stage."),
+        reviewer: z.string().optional().describe("Reviewer persona name (e.g. 'aidlc-architecture-reviewer-agent')."),
+        intentId: z.string().optional().describe("Optional intent ID."),
+    }, async ({ stageId, reviewer, intentId }) => {
+        try {
+            const result = await DlcStateMachine.requestReview({
+                stageId,
+                reviewer,
+                intentId,
+            });
+            const icon = result.verdict === "APPROVED" ? "✅" : result.verdict === "ADVISORY" ? "ℹ️" : "⚠️";
+            const lines = [
+                `# ${icon} Reviewer Verdict: \`${result.verdict}\``,
+                `* **Stage**: \`${result.stageId}\``,
+                `* **Reviewer**: \`${result.reviewer}\``,
+                `* **Summary**: ${result.reviewSummary}`,
+                "",
+                "## Findings:",
+                ...result.findings.map((f) => `* ${f}`),
+            ];
+            return {
+                content: [{ type: "text", text: lines.join("\n") }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Review request failed: ${err.message}` }],
+            };
+        }
+    });
+    // 17. dlc_reopen_stage: Stage Reopen & Revision (Recovery Protocol)
+    server.tool("dlc_reopen_stage", "Reopen a previous stage back to 'in_progress' when requirements change or revisions are requested (Recovery Protocol), preserving all files.", {
+        stageId: z.string().describe("Stage ID to reopen (e.g. 'domain-design', 'intent-capture')"),
+        reason: z.string().optional().describe("Reason for reopening stage"),
+        intentId: z.string().optional().describe("Optional intent ID."),
+    }, async ({ stageId, reason, intentId }) => {
+        try {
+            const result = await DlcStateMachine.reopenStage({
+                stageId,
+                reason,
+                intentId,
+            });
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `🔄 ${result.message}\nStatus updated to \`in_progress\`. Use \`dlc_submit_draft\` when revisions are complete.`,
+                    },
+                ],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Failed to reopen stage: ${err.message}` }],
+            };
+        }
+    });
 }
 //# sourceMappingURL=tools.js.map

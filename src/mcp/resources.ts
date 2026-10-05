@@ -6,6 +6,12 @@ import { CONFIG } from "../config.js";
 import { STAGE_DEFINITIONS } from "../engine/socratic-rubric.js";
 import { SCOPES } from "../engine/profiles.js";
 import { listKnowledgeDocuments } from "../utils/knowledge.js";
+import {
+  STAGE_PROTOCOL,
+  REVIEWER_PROTOCOL,
+  CONSTRUCTION_PROTOCOL,
+  RECOVERY_PROTOCOL,
+} from "../engine/protocols.js";
 
 export function registerDlcResources(server: McpServer): void {
   // 1. aidlc://state -> aidlc-state.md
@@ -141,5 +147,61 @@ export function registerDlcResources(server: McpServer): void {
         ],
       };
     }
+  );
+
+  // 6. aidlc://protocols/stage-protocol -> Stage Voice & Gate Rules
+  server.registerResource(
+    "aidlc-protocol-stage",
+    "aidlc://protocols/stage-protocol",
+    {
+      title: "AI-DLC Stage Protocol",
+      description: "Voice contract, HARD STOP approval gate rules, and atomic stage ritual.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => ({
+      contents: [{ uri: uri.href, mimeType: "text/markdown", text: STAGE_PROTOCOL }],
+    })
+  );
+
+  // 7. aidlc://protocols/reviewer-protocol -> Reviewer Invocation (§12a)
+  server.registerResource(
+    "aidlc-protocol-reviewer",
+    "aidlc://protocols/reviewer-protocol",
+    {
+      title: "AI-DLC Reviewer Protocol (§12a)",
+      description: "Independent verification pass protocol and structured verdict rules.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => ({
+      contents: [{ uri: uri.href, mimeType: "text/markdown", text: REVIEWER_PROTOCOL }],
+    })
+  );
+
+  // 8. aidlc://protocols/construction-protocol -> Units of Work & Loopback
+  server.registerResource(
+    "aidlc-protocol-construction",
+    "aidlc://protocols/construction-protocol",
+    {
+      title: "AI-DLC Construction Protocol",
+      description: "Units of Work (UoW) DAG execution, Plan Approval fence, and build-and-test loopback.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => ({
+      contents: [{ uri: uri.href, mimeType: "text/markdown", text: CONSTRUCTION_PROTOCOL }],
+    })
+  );
+
+  // 9. aidlc://protocols/recovery-protocol -> Session Resume & Stage Reopening
+  server.registerResource(
+    "aidlc-protocol-recovery",
+    "aidlc://protocols/recovery-protocol",
+    {
+      title: "AI-DLC Recovery Protocol",
+      description: "Session resumption and stage reopening without data loss.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => ({
+      contents: [{ uri: uri.href, mimeType: "text/markdown", text: RECOVERY_PROTOCOL }],
+    })
   );
 }

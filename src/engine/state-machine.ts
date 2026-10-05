@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { IntentState, ScopeType, ProjectType, DepthLevel, TestStrategy, RubricEvaluationResult } from "../types.js";
 import { SCOPES, createStagesForScope } from "./profiles.js";
 import { STAGE_DEFINITIONS, evaluateRubric } from "./socratic-rubric.js";
@@ -9,6 +11,7 @@ import {
   persistIntentState,
   saveStageArtifact,
   setActiveIntent,
+  getIntentDirPath,
 } from "../utils/filesystem.js";
 import { getWorkspaceDir } from "../config.js";
 
@@ -250,4 +253,162 @@ export class DlcStateMachine {
         : `Stage '${currentStage.id}' approved. Advanced to stage '${nextStageId}'.`,
     };
   }
+
+  /**
+   * Logs a non-gate structured decision made during Socratic interview (§2).
+   */
+  public static async logDecision(params: {
+    stageId?: string;
+    decision: string;
+    rationale: string;
+    optionsConsidered?: string[];
+    intentId?: string;
+    workspaceDir?: string;
+  }): Promise<{ logged: boolean; count: number }> {
+    const ws = params.workspaceDir || getWorkspaceDir();
+    const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
+    if (!intent) throw new Error("No active intent found.");
+
+    const intentDir = getIntentDirPath(intent.intentId, ws);
+    const decPath = path.join(intentDir, "decisions.json");
+
+    let existing: any[] = [];
+    try {
+      const raw = await fs.readFile(decPath, "utf-8");
+      existing = JSON.parse(raw);
+    } catch {}
+
+    const entry = {
+      id: `dec-${Date.now()}`,
+      stageId: params.stageId || intent.stages[intent.currentStageIndex]?.id,
+      decision: params.decision,
+      rationale: params.rationale,
+      optionsConsidered: params.optionsConsidered || [],
+      timestamp: new Date().toISOString(),
+    };
+
+    existing.push(entry);
+    await fs.writeFile(decPath, JSON.stringify(existing, null, 2), "utf-8");
+
+    return { logged: true, count: existing.length };
+  }
+
+  /**
+   * Dispatches independent reviewer verification according to §12a.
+   */
+  public static async requestReview(params: {
+    stageId?: string;
+    reviewer?: string;
+    intentId?: string;
+    workspaceDir?: string;
+  }): Promise<{
+    stageId: string;
+    reviewer: string;
+    verdict: "APPROVED" | "REVISE" | "ADVISORY";
+    findings: string[];
+    reviewSummary: string;
+  }> {
+    const ws = params.workspaceDir || getWorkspaceDir();
+    const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
+    if (!intent) throw new Error("No active intent found.");
+
+    const currentStage = intent.stages[intent.currentStageIndex];
+    const targetStageId = params.stageId || currentStage?.id;
+    if (!targetStageId) throw new Error("No stage specified.");
+
+    const stageState = intent.stages.find((s) => s.id === targetStageId);
+    if (!stageState || !stageState.artifactPath) {
+      throw new Error(`Stage '${targetStageId}' has no submitted artifact to review.`);
+    }
+
+    const artifactFullPath = path.join(ws, stageState.artifactPath);
+    let content = "";
+    try {
+      content = await fs.readFile(artifactFullPath, "utf-8");
+    } catch {
+      throw new Error(`Could not read artifact at '${stageState.artifactPath}'`);
+    }
+
+    const evalResult = evaluateRubric(targetStageId, content);
+    const reviewerName = params.reviewer || `${targetStageId}-reviewer`;
+
+    let verdict: "APPROVED" | "REVISE" | "ADVISORY" = "APPROVED";
+    const findings: string[] = [];
+
+    if (!evalResult.satisfied) {
+      verdict = "REVISE";
+      findings.push(...evalResult.unresolvedProbes.map((p) => `Unresolved dimension: ${p}`));
+    } else if (evalResult.score < 1.0) {
+      verdict = "ADVISORY";
+      findings.push("Artifact meets minimum rubric criteria; minor architectural clarifications recommended.");
+    } else {
+      verdict = "APPROVED";
+      findings.push("All required rubric criteria and boundary conditions verified.");
+    }
+
+    // Save review file under intent record dir
+    const intentDir = getIntentDirPath(intent.intentId, ws);
+    const reviewsDir = path.join(intentDir, "reviews");
+    await fs.mkdir(reviewsDir, { recursive: true });
+
+    const reviewFilename = `${targetStageId}-review.json`;
+    await fs.writeFile(
+      path.join(reviewsDir, reviewFilename),
+      JSON.stringify(
+        {
+          stageId: targetStageId,
+          reviewer: reviewerName,
+          verdict,
+          findings,
+          score: evalResult.score,
+          reviewedAt: new Date().toISOString(),
+        },
+        null,
+        2
+      ),
+      "utf-8"
+    );
+
+    return {
+      stageId: targetStageId,
+      reviewer: reviewerName,
+      verdict,
+      findings,
+      reviewSummary: `Independent review by '${reviewerName}': verdict ${verdict}.`,
+    };
+  }
+
+  /**
+   * Reopens a stage according to Recovery Protocol.
+   */
+  public static async reopenStage(params: {
+    stageId: string;
+    reason?: string;
+    intentId?: string;
+    workspaceDir?: string;
+  }): Promise<{ success: boolean; reopenedStageId: string; message: string }> {
+    const ws = params.workspaceDir || getWorkspaceDir();
+    const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
+    if (!intent) throw new Error("No active intent found.");
+
+    const targetIdx = intent.stages.findIndex((s) => s.id === params.stageId);
+    if (targetIdx === -1) {
+      throw new Error(`Stage '${params.stageId}' not found in intent roadmap.`);
+    }
+
+    intent.currentStageIndex = targetIdx;
+    const stage = intent.stages[targetIdx];
+    stage.status = "in_progress";
+    delete stage.approvedAt;
+    stage.gateNotes = params.reason ? `Reopened: ${params.reason}` : "Reopened by user request.";
+
+    await persistIntentState(intent, ws);
+
+    return {
+      success: true,
+      reopenedStageId: stage.id,
+      message: `Reopened Stage ${stage.number} (${stage.name}). Files preserved for revision.`,
+    };
+  }
 }
+
