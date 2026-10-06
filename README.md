@@ -6,6 +6,85 @@ It equips AI coding assistants (Claude Code, Cursor, Codex CLI, Antigravity, Kir
 
 ---
 
+## 🏛️ System Architecture
+
+```mermaid
+flowchart TB
+    subgraph Clients["1. AI Assistant & Client Tier"]
+        ClaudeCode["Claude Code CLI"]
+        Cursor["Cursor IDE"]
+        Desktop["Claude Desktop"]
+        Codex["Codex / Antigravity / Kiro"]
+        CICD["CI/CD & Git Pre-Commit"]
+    end
+
+    subgraph Entrypoint["2. Gateway & Dispatch Tier"]
+        SmartEntry["Smart Entrypoint (src/index.ts)"]
+        StdioMCP["MCP Server (Stdio JSON-RPC 2.0)\n33 Tools | 13 Prompts | 26 Resources"]
+        CliRouter["CLI Dispatcher (src/cli/dispatcher.ts)\n--json | auto-workspace root"]
+    end
+
+    subgraph Orchestration["3. Core Orchestration Engine"]
+        StateMachine["Lifecycle State Machine\n(Hard-stop Gates | Phase Transitions)"]
+        SocraticEngine["Socratic Rubric Evaluator\n(Probing Dimensions | Heuristics)"]
+        ExtensionLoader["3-Tier Extension Loader\n(Built-in | Org Repo | Workspace)"]
+        ProfilesMatrix["Scope Matrix & Routing\n(11 Scopes | Auto-Detection)"]
+        SensorsRunner["Deterministic Sensors Engine\n(Provenance | Citations | DAG Sorting)"]
+        SkillsEngine["Skills & Reporting Engine\n(OUTCOMES.md | Replay | Cost)"]
+    end
+
+    subgraph GuardsAndHooks["4. Lifecycle Guards & Protocols"]
+        FreezeGuard["Review Freeze Guard\n(Freezes after §12a terminal pass)"]
+        PlanGuard["Plan Approval Guard\n(Hard-locks code-gen until plan approved)"]
+        AuditTrail["Append-Only Audit Trail\n(audit/audit.jsonl)"]
+        HooksAdapter["Harness Hooks\n(session-start, pre-tool, stop, statusline)"]
+    end
+
+    subgraph Storage["5. Workspace Storage & Layered Subsystems"]
+        MemorySubsystem["3-Tier Layered Memory\n(org.md -> team.md -> project.md)"]
+        KnowledgeBase["Two-Tier Knowledge Base\n(59 Bundled Guides + Workspace PRDs)"]
+        IntentSpace["Active Intent Workspace\n(./aidlc/spaces/default/intents/<id>/)"]
+    end
+
+    Clients -->|stdio / JSON-RPC| SmartEntry
+    Clients -->|CLI / shell tools| SmartEntry
+
+    SmartEntry -->|args === 0 or --mcp| StdioMCP
+    SmartEntry -->|subcommands: doctor, intent, status...| CliRouter
+
+    StdioMCP --> StateMachine
+    StdioMCP --> SocraticEngine
+    StdioMCP --> ExtensionLoader
+    StdioMCP --> SensorsRunner
+    StdioMCP --> SkillsEngine
+
+    CliRouter --> StateMachine
+    CliRouter --> ExtensionLoader
+    CliRouter --> SensorsRunner
+
+    StateMachine --> ProfilesMatrix
+    StateMachine --> SocraticEngine
+    StateMachine --> FreezeGuard
+    StateMachine --> PlanGuard
+    StateMachine --> AuditTrail
+    StateMachine --> IntentSpace
+
+    ExtensionLoader --> ProfilesMatrix
+    ExtensionLoader --> SocraticEngine
+    ExtensionLoader --> KnowledgeBase
+
+    SensorsRunner --> IntentSpace
+    SkillsEngine --> AuditTrail
+    SkillsEngine --> IntentSpace
+
+    HooksAdapter --> AuditTrail
+    HooksAdapter --> IntentSpace
+    MemorySubsystem --> IntentSpace
+    KnowledgeBase --> IntentSpace
+```
+
+---
+
 ## 🌟 Comprehensive Features
 
 1. **Complete 33-Stage Lifecycle Grid**:
