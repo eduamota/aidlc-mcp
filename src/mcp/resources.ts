@@ -13,6 +13,7 @@ import {
   RECOVERY_PROTOCOL,
 } from "../engine/protocols.js";
 import { getAllStageSpecs } from "../stages/registry.js";
+import { readAuditTrail } from "../engine/audit.js";
 
 export function registerDlcResources(server: McpServer): void {
   // 1. aidlc://state -> aidlc-state.md
@@ -250,4 +251,27 @@ export function registerDlcResources(server: McpServer): void {
       })
     );
   }
+
+  // 12. aidlc://audit -> Audit trail event stream
+  server.registerResource(
+    "aidlc-audit-trail",
+    "aidlc://audit",
+    {
+      title: "AI-DLC Audit Trail",
+      description: "Structured JSON stream of recent lifecycle audit events.",
+      mimeType: "application/json",
+    },
+    async (uri) => {
+      const events = await readAuditTrail();
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: JSON.stringify(events, null, 2),
+          },
+        ],
+      };
+    }
+  );
 }

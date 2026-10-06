@@ -7,6 +7,7 @@ import { SCOPES } from "../engine/profiles.js";
 import { listKnowledgeDocuments } from "../utils/knowledge.js";
 import { STAGE_PROTOCOL, REVIEWER_PROTOCOL, CONSTRUCTION_PROTOCOL, RECOVERY_PROTOCOL, } from "../engine/protocols.js";
 import { getAllStageSpecs } from "../stages/registry.js";
+import { readAuditTrail } from "../engine/audit.js";
 export function registerDlcResources(server) {
     // 1. aidlc://state -> aidlc-state.md
     server.registerResource("aidlc-state", "aidlc://state", {
@@ -177,5 +178,22 @@ export function registerDlcResources(server) {
             contents: [{ uri: uri.href, mimeType: "text/markdown", text: spec.markdown }],
         }));
     }
+    // 12. aidlc://audit -> Audit trail event stream
+    server.registerResource("aidlc-audit-trail", "aidlc://audit", {
+        title: "AI-DLC Audit Trail",
+        description: "Structured JSON stream of recent lifecycle audit events.",
+        mimeType: "application/json",
+    }, async (uri) => {
+        const events = await readAuditTrail();
+        return {
+            contents: [
+                {
+                    uri: uri.href,
+                    mimeType: "application/json",
+                    text: JSON.stringify(events, null, 2),
+                },
+            ],
+        };
+    });
 }
 //# sourceMappingURL=resources.js.map

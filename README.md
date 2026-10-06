@@ -115,6 +115,9 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `dlc_request_review` | Dispatch independent reviewer verification pass (§12a) with structured verdicts. |
 | `dlc_reopen_stage` | Reopen a previous stage back to `in_progress` (Recovery Protocol), preserving files. |
 | `dlc_get_stage_spec` | Retrieve official execution steps, YAML frontmatter, and sensor rules for any stage. |
+| `dlc_get_audit_trail` | Inspect the append-only audit trail and lifecycle event log (`audit/audit.jsonl`). |
+| `dlc_install_hooks` | Install client lifecycle hooks into Claude Code, Cursor, or Git. |
+| `dlc_run_hook` | Manually execute a lifecycle hook event (`session-start`, `pre-tool`, `stop`, `statusline`). |
 
 ### Prompts
 | Prompt | Description |
@@ -141,12 +144,31 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `aidlc://rubrics` | Complete catalog of 33 stage rubrics and probing dimensions. |
 | `aidlc://scopes` | Scope routing matrix and stage sequences. |
 | `aidlc://knowledge` | Listing of team standards and reference documents. |
+| `aidlc://audit` | Append-only audit trail of lifecycle events (`audit.jsonl`). |
 | `aidlc://stages/catalog` | Metadata catalog for all 33 official stages from `core/aidlc-common/stages/`. |
 | `aidlc://stages/{slug}` | Verbatim markdown execution guide & frontmatter for any stage (e.g. `domain-design`). |
 | `aidlc://protocols/stage-protocol` | Voice contract, HARD STOP approval gate rules, atomic stage ritual. |
 | `aidlc://protocols/reviewer-protocol` | Independent reviewer invocation protocol (§12a) and verdict schema. |
 | `aidlc://protocols/construction-protocol` | Units of Work (UoW) DAG execution, Plan Approval, build-and-test loopback. |
 | `aidlc://protocols/recovery-protocol` | Session resumption and stage reopening without data loss. |
+
+---
+
+## 🛡️ Lifecycle Guards & Hooks Architecture
+
+The server implements upstream AI-DLC lifecycle guardrails across two complementary tiers:
+
+### 1. Server-Side Guards (Client-Agnostic)
+* **Review Freeze Guard**: Once an artifact passes independent review (`dlc_request_review`), it is frozen against direct edits. Revisions require explicitly unfreezing via `dlc_reopen_stage`.
+* **Plan Approval Guard**: Implementation code generation (`code-generation`) is hard-locked until the architectural/implementation plan (`delivery-planning`, `units-generation`, or `functional-design`) receives gate approval.
+* **Audit Trail**: Every session event, stage transition, gate approval, and decision writes an append-only event to `./aidlc/spaces/default/intents/<intent>/audit/audit.jsonl`.
+
+### 2. Client Harness Hook Adapters
+Run `dlc_install_hooks({ target: "all" })` or use CLI subcommands:
+* **`session-start`**: Injects active workflow state (`aidlc-state.md`) into context when starting/resuming sessions.
+* **`pre-tool`**: Refuses raw edits to state files or audit logs outside workflow verbs.
+* **`stop`**: Validates the continuation loop, allowing turn stops only at genuine approval gates or question prompts.
+* **`statusline`**: Displays real-time stage and gate status in the CLI status bar.
 
 ---
 

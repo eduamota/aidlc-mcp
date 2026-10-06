@@ -10,6 +10,9 @@ import { runDlcDoctor } from "../utils/doctor.js";
 import { addKnowledgeDocument, listKnowledgeDocuments, readKnowledgeDocument } from "../utils/knowledge.js";
 import { STAGE_PROTOCOL, REVIEWER_PROTOCOL, CONSTRUCTION_PROTOCOL, RECOVERY_PROTOCOL, } from "./protocols.js";
 import { getStageSpec, getAllStageSpecs } from "../stages/registry.js";
+import { readAuditTrail } from "./audit.js";
+import { executeHook } from "../hooks/runner.js";
+import { installHooks } from "../hooks/installer.js";
 test("Socratic Rubric Evaluation", () => {
     // 1. Incomplete draft
     const poorContent = "We want an inventory API with GET and POST.";
@@ -250,5 +253,119 @@ test("Official Stage Specifications Catalog (33 Stages)", () => {
     const stateSpec = getStageSpec("state-initialization");
     assert.ok(stateSpec);
     assert.equal(stateSpec.slug, "state-init");
+});
+test("AI-DLC Lifecycle Guards: Review Freeze and Plan Approval", async () => {
+    const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-guards-"));
+    try {
+        const { intent } = await DlcStateMachine.initIntent({
+            label: "guards-test",
+            description: "Testing Review Freeze and Plan Approval Guards",
+            profile: "express",
+            workspaceDir: tempWs,
+        });
+        const richReqs = `
+# Requirements Analysis
+## Functional Requirements
+- Requirement 1: User login with JWT token.
+- Requirement 2: Token refresh endpoint.
+## Edge Cases and Limits
+- Reject expired token with 401.
+- Limit auth attempts to 5 per min.
+## Non-Functional Requirements (NFRs)
+- Latency under 10ms.
+- 99.99% availability.
+    `;
+        // 1. Submit and approve review -> should freeze the stage
+        await DlcStateMachine.submitDraft({
+            content: richReqs,
+            workspaceDir: tempWs,
+        });
+        const rev = await DlcStateMachine.requestReview({
+            stageId: "requirements-analysis",
+            reviewer: "lead-reviewer",
+            workspaceDir: tempWs,
+        });
+        assert.equal(rev.verdict, "APPROVED");
+        // Check intent stage is frozen
+        const status1 = await DlcStateMachine.getStatus(undefined, tempWs);
+        assert.equal(status1.activeStageState?.frozen, true);
+        // 2. Attempting to submit another draft while frozen must be rejected
+        await assert.rejects(async () => {
+            await DlcStateMachine.submitDraft({
+                content: "# Modifying frozen draft without reopening",
+                workspaceDir: tempWs,
+            });
+        }, /\[REVIEW_FREEZE_BLOCKED\]/, "Frozen stage draft edit must be blocked");
+        // 3. Reopening the stage must unfreeze it
+        await DlcStateMachine.reopenStage({
+            stageId: "requirements-analysis",
+            reason: "Need to amend requirements",
+            workspaceDir: tempWs,
+        });
+        const status2 = await DlcStateMachine.getStatus(undefined, tempWs);
+        assert.equal(status2.activeStageState?.frozen, false);
+        // 4. Now submitting draft succeeds
+        const draft2 = await DlcStateMachine.submitDraft({
+            content: richReqs,
+            workspaceDir: tempWs,
+        });
+        assert.equal(draft2.evaluation.satisfied, true);
+        // 5. Test Audit Trail
+        const auditEvents = await readAuditTrail(intent.intentId, tempWs);
+        assert.ok(auditEvents.length >= 4, "Should have recorded multiple audit events");
+        assert.ok(auditEvents.some((e) => e.type === "INTENT_INITIALIZED"));
+        assert.ok(auditEvents.some((e) => e.type === "STAGE_FROZEN"));
+        assert.ok(auditEvents.some((e) => e.type === "GUARD_REFUSAL"));
+        assert.ok(auditEvents.some((e) => e.type === "STAGE_UNFROZEN"));
+    }
+    finally {
+        await fs.rm(tempWs, { recursive: true, force: true });
+    }
+});
+test("AI-DLC Lifecycle Hooks Runner and Installer", async () => {
+    const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-hooks-"));
+    try {
+        // 1. Session start with no intent
+        const h1 = await executeHook({ event: "session-start", workspaceDir: tempWs });
+        assert.equal(h1.action, "allow");
+        // 2. Initialize intent and check session-start context injection
+        await DlcStateMachine.initIntent({
+            label: "hook-test",
+            description: "Hook verification intent",
+            profile: "express",
+            workspaceDir: tempWs,
+        });
+        const h2 = await executeHook({ event: "session-start", workspaceDir: tempWs });
+        assert.equal(h2.action, "allow");
+        assert.ok(h2.contextPayload?.includes("AI-DLC Active Session Context"));
+        assert.ok(h2.contextPayload?.includes("hook-test"));
+        // 3. PreToolUse state-transition guard
+        const h3Safe = await executeHook({
+            event: "pre-tool",
+            toolArgs: { path: "src/index.ts" },
+            workspaceDir: tempWs,
+        });
+        assert.equal(h3Safe.action, "allow");
+        const h3Block = await executeHook({
+            event: "pre-tool",
+            toolArgs: { path: "aidlc/spaces/default/intents/261005-hook-test/aidlc-state.md" },
+            workspaceDir: tempWs,
+        });
+        assert.equal(h3Block.action, "block");
+        assert.ok(h3Block.message?.includes("STATE_TRANSITION_GUARD"));
+        // 4. StatusLine hook
+        const h4 = await executeHook({ event: "statusline", workspaceDir: tempWs });
+        assert.equal(h4.action, "notify");
+        assert.ok(h4.message?.includes("AI-DLC: hook-test"));
+        // 5. Hooks Installer
+        const installRes = await installHooks({ target: "all", workspaceDir: tempWs });
+        assert.equal(installRes.installed.length, 3);
+        assert.ok(installRes.installed.some((i) => i.includes(".claude/settings.json")));
+        assert.ok(installRes.installed.some((i) => i.includes(".cursor/rules")));
+        assert.ok(installRes.installed.some((i) => i.includes(".git/hooks/pre-commit")));
+    }
+    finally {
+        await fs.rm(tempWs, { recursive: true, force: true });
+    }
 });
 //# sourceMappingURL=engine.test.js.map

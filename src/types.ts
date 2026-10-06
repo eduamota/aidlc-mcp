@@ -62,6 +62,8 @@ export interface StageState {
   approvedAt?: string;
   gateNotes?: string;
   unresolvedProbes?: string[];
+  frozen?: boolean;
+  frozenReason?: string;
 }
 
 export interface IntentState {
@@ -120,3 +122,53 @@ export interface DoctorReport {
   activeSpace: string;
   checks: DoctorCheck[];
 }
+
+export type AuditEventType =
+  | "SESSION_STARTED"
+  | "SESSION_ENDED"
+  | "INTENT_INITIALIZED"
+  | "INTENT_SWITCHED"
+  | "STAGE_TRANSITION"
+  | "RUBRIC_EVALUATED"
+  | "REVIEW_REQUESTED"
+  | "REVIEW_COMPLETED"
+  | "STAGE_FROZEN"
+  | "STAGE_UNFROZEN"
+  | "PLAN_APPROVAL_GRANTED"
+  | "GATE_APPROVED"
+  | "DECISION_RECORDED"
+  | "GUARD_REFUSAL";
+
+export interface AuditEvent {
+  id: string;
+  timestamp: string;
+  type: AuditEventType;
+  intentId?: string;
+  stageId?: string;
+  summary: string;
+  details?: Record<string, any>;
+}
+
+export type HookEvent =
+  | "session-start"
+  | "session-end"
+  | "pre-tool"
+  | "post-tool"
+  | "pre-compact"
+  | "stop"
+  | "statusline";
+
+export interface HookContext {
+  event: HookEvent;
+  workspaceDir?: string;
+  toolName?: string;
+  toolArgs?: Record<string, any>;
+  sessionSource?: "startup" | "resume" | "clear" | "compact";
+}
+
+export interface HookResult {
+  action: "allow" | "block" | "notify";
+  message?: string;
+  contextPayload?: string;
+}
+

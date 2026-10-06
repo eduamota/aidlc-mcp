@@ -4,6 +4,7 @@ import { SCOPES, createStagesForScope } from "./profiles.js";
 import { STAGE_DEFINITIONS, evaluateRubric } from "./socratic-rubric.js";
 import { generateIntentId, scaffoldIntent, loadActiveIntentState, loadIntentState, persistIntentState, saveStageArtifact, setActiveIntent, getIntentDirPath, } from "../utils/filesystem.js";
 import { getWorkspaceDir } from "../config.js";
+import { appendAuditLog } from "./audit.js";
 export class DlcStateMachine {
     /**
      * Initializes a new Intent with selected scope/profile, depth, and test strategy.
@@ -36,6 +37,12 @@ export class DlcStateMachine {
             status: "in_progress",
         };
         const intentDir = await scaffoldIntent(intent, ws);
+        await appendAuditLog({
+            type: "INTENT_INITIALIZED",
+            intentId: intent.intentId,
+            summary: `Initialized intent '${intent.intentId}' with scope '${profile}', depth '${depth}', testStrategy '${testStrategy}'.`,
+            details: { label: params.label, profile, projectType, depth, testStrategy },
+        }, ws);
         return { intent, intentDir };
     }
     /**
@@ -48,6 +55,11 @@ export class DlcStateMachine {
             throw new Error(`Intent '${intentId}' not found in workspace.`);
         }
         await setActiveIntent(intentId, ws);
+        await appendAuditLog({
+            type: "INTENT_SWITCHED",
+            intentId: intent.intentId,
+            summary: `Switched active intent to '${intent.intentId}'.`,
+        }, ws);
         return intent;
     }
     /**
@@ -93,12 +105,42 @@ export class DlcStateMachine {
         if (!stageDef) {
             throw new Error(`Unknown stage '${targetStageId}'`);
         }
+        const stageIndex = intent.stages.findIndex((s) => s.id === targetStageId);
+        if (stageIndex !== -1) {
+            const stage = intent.stages[stageIndex];
+            // Review Freeze Guard (§12a / core/hooks/aidlc-review-freeze.ts)
+            if (stage.frozen) {
+                await appendAuditLog({
+                    type: "GUARD_REFUSAL",
+                    intentId: intent.intentId,
+                    stageId: targetStageId,
+                    summary: `[REVIEW_FREEZE_BLOCKED] Refused draft submission for frozen stage '${targetStageId}'.`,
+                    details: { stageId: targetStageId, frozenReason: stage.frozenReason },
+                }, ws);
+                throw new Error(`[REVIEW_FREEZE_BLOCKED] Stage '${targetStageId}' is frozen (${stage.frozenReason || "terminal review receipt"}). Call dlc_reopen_stage({ stageId: '${targetStageId}' }) to unfreeze before modifying.`);
+            }
+        }
+        // Plan Approval Guard (Stage Protocol Construction / core/hooks/aidlc-plan-approval-guard.ts)
+        if (targetStageId === "code-generation") {
+            const planningStages = ["functional-design", "units-generation", "delivery-planning"];
+            const priorPlanning = intent.stages.filter((s) => planningStages.includes(s.id));
+            const unapproved = priorPlanning.filter((s) => s.status !== "approved");
+            if (unapproved.length > 0) {
+                await appendAuditLog({
+                    type: "GUARD_REFUSAL",
+                    intentId: intent.intentId,
+                    stageId: targetStageId,
+                    summary: `[PLAN_APPROVAL_GUARD] Blocked code-generation: ${unapproved.map(s => s.id).join(", ")} unapproved.`,
+                    details: { unapproved: unapproved.map(s => s.id) },
+                }, ws);
+                throw new Error(`[PLAN_APPROVAL_GUARD] Plan Approval fence is active: Preceding planning stage(s) [${unapproved.map((s) => s.id).join(", ")}] must be approved before code generation can begin.`);
+            }
+        }
         const artifactName = params.artifactName || stageDef.defaultArtifactName;
         const relArtifactPath = await saveStageArtifact(intent.intentId, stageDef.phase, artifactName, params.content, ws);
         // Evaluate against Socratic Rubric
         const evaluation = evaluateRubric(targetStageId, params.content);
         // Update StageState in intent
-        const stageIndex = intent.stages.findIndex((s) => s.id === targetStageId);
         if (stageIndex !== -1) {
             const stage = intent.stages[stageIndex];
             stage.artifactPath = relArtifactPath;
@@ -111,6 +153,13 @@ export class DlcStateMachine {
             }
             await persistIntentState(intent, ws);
         }
+        await appendAuditLog({
+            type: "RUBRIC_EVALUATED",
+            intentId: intent.intentId,
+            stageId: targetStageId,
+            summary: `Evaluated draft artifact for stage '${targetStageId}': score ${Math.round(evaluation.score * 100)}%, satisfied: ${evaluation.satisfied}.`,
+            details: { score: evaluation.score, satisfied: evaluation.satisfied, artifactPath: relArtifactPath },
+        }, ws);
         return {
             evaluation,
             artifactPath: relArtifactPath,
@@ -164,6 +213,29 @@ export class DlcStateMachine {
             workflowComplete = true;
         }
         await persistIntentState(intent, ws);
+        await appendAuditLog({
+            type: "GATE_APPROVED",
+            intentId: intent.intentId,
+            stageId: currentStage.id,
+            summary: `Stage '${currentStage.id}' gate approved: ${params.notes || "Approved by user"}.`,
+            details: { stageId: currentStage.id, nextStageId, workflowComplete },
+        }, ws);
+        if (["delivery-planning", "functional-design", "units-generation"].includes(currentStage.id)) {
+            await appendAuditLog({
+                type: "PLAN_APPROVAL_GRANTED",
+                intentId: intent.intentId,
+                stageId: currentStage.id,
+                summary: `Plan Approval fence unlocked: '${currentStage.id}' plan approved.`,
+            }, ws);
+        }
+        if (nextStageId) {
+            await appendAuditLog({
+                type: "STAGE_TRANSITION",
+                intentId: intent.intentId,
+                stageId: nextStageId,
+                summary: `Advanced workflow to stage '${nextStageId}'.`,
+            }, ws);
+        }
         return {
             success: true,
             previousStageId: currentStage.id,
@@ -200,6 +272,13 @@ export class DlcStateMachine {
         };
         existing.push(entry);
         await fs.writeFile(decPath, JSON.stringify(existing, null, 2), "utf-8");
+        await appendAuditLog({
+            type: "DECISION_RECORDED",
+            intentId: intent.intentId,
+            stageId: entry.stageId,
+            summary: `Recorded technical decision: "${params.decision}".`,
+            details: entry,
+        }, ws);
         return { logged: true, count: existing.length };
     }
     /**
@@ -255,6 +334,25 @@ export class DlcStateMachine {
             score: evalResult.score,
             reviewedAt: new Date().toISOString(),
         }, null, 2), "utf-8");
+        if (verdict === "APPROVED" || verdict === "ADVISORY") {
+            stageState.frozen = true;
+            stageState.frozenReason = `Terminal review pass by '${reviewerName}' (${verdict})`;
+            await persistIntentState(intent, ws);
+            await appendAuditLog({
+                type: "STAGE_FROZEN",
+                intentId: intent.intentId,
+                stageId: targetStageId,
+                summary: `Stage '${targetStageId}' frozen following terminal review pass by '${reviewerName}'.`,
+                details: { reviewer: reviewerName, verdict, score: evalResult.score },
+            }, ws);
+        }
+        await appendAuditLog({
+            type: "REVIEW_COMPLETED",
+            intentId: intent.intentId,
+            stageId: targetStageId,
+            summary: `Independent review for stage '${targetStageId}' completed with verdict '${verdict}'.`,
+            details: { reviewer: reviewerName, verdict, findings },
+        }, ws);
         return {
             stageId: targetStageId,
             reviewer: reviewerName,
@@ -279,8 +377,16 @@ export class DlcStateMachine {
         const stage = intent.stages[targetIdx];
         stage.status = "in_progress";
         delete stage.approvedAt;
+        stage.frozen = false;
+        delete stage.frozenReason;
         stage.gateNotes = params.reason ? `Reopened: ${params.reason}` : "Reopened by user request.";
         await persistIntentState(intent, ws);
+        await appendAuditLog({
+            type: "STAGE_UNFROZEN",
+            intentId: intent.intentId,
+            stageId: stage.id,
+            summary: `Stage '${stage.id}' unfrozen and reopened for revision: ${params.reason || "Reopened by user"}.`,
+        }, ws);
         return {
             success: true,
             reopenedStageId: stage.id,

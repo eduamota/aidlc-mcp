@@ -7,6 +7,9 @@ import { scanWorkspaceForReverseEngineering } from "../utils/reverse-engineering
 import { runDlcDoctor } from "../utils/doctor.js";
 import { addKnowledgeDocument, listKnowledgeDocuments, readKnowledgeDocument } from "../utils/knowledge.js";
 import { getStageSpec, getAllStageSpecs } from "../stages/registry.js";
+import { readAuditTrail } from "../engine/audit.js";
+import { executeHook } from "../hooks/runner.js";
+import { installHooks } from "../hooks/installer.js";
 const SCOPE_ENUM = [
     "enterprise",
     "feature",
@@ -768,6 +771,105 @@ export function registerDlcTools(server) {
             return {
                 isError: true,
                 content: [{ type: "text", text: `Failed to get stage spec: ${err.message}` }],
+            };
+        }
+    });
+    // 19. dlc_get_audit_trail: Audit Trail Inspection
+    server.tool("dlc_get_audit_trail", "Inspect the append-only audit trail and lifecycle event log (<record>/audit/audit.jsonl) for the active intent.", {
+        intentId: z.string().optional().describe("Optional intent ID. Defaults to active intent."),
+        limit: z.number().optional().default(50).describe("Maximum number of recent events to retrieve (default: 50)."),
+    }, async ({ intentId, limit }) => {
+        try {
+            const events = await readAuditTrail(intentId);
+            if (events.length === 0) {
+                return {
+                    content: [{ type: "text", text: "No audit events recorded yet." }],
+                };
+            }
+            const recent = events.slice(-limit);
+            const lines = [
+                `# AI-DLC Audit Trail (${recent.length} recent events of ${events.length} total)`,
+                "| Timestamp | Event Type | Stage | Summary |",
+                "|---|---|---|---|",
+            ];
+            for (const e of recent) {
+                lines.push(`| \`${e.timestamp}\` | \`${e.type}\` | \`${e.stageId || "-"}\` | ${e.summary} |`);
+            }
+            return {
+                content: [{ type: "text", text: lines.join("\n") }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Failed to read audit trail: ${err.message}` }],
+            };
+        }
+    });
+    // 20. dlc_install_hooks: Client Lifecycle Hooks Installer
+    server.tool("dlc_install_hooks", "Install and configure client harness lifecycle hooks (SessionStart, PreToolUse, Stop, statusLine) for Claude Code (.claude/settings.json), Cursor (.cursor/rules/), or Git (.git/hooks/pre-commit).", {
+        target: z
+            .enum(["all", "claude-code", "cursor", "git"])
+            .optional()
+            .default("all")
+            .describe("Target client harness to install hooks into (default: 'all')"),
+    }, async ({ target }) => {
+        try {
+            const res = await installHooks({ target });
+            const lines = [
+                `# AI-DLC Lifecycle Hooks Installation`,
+                `**Installed Components**:`,
+                ...res.installed.map((i) => `* ✅ ${i}`),
+            ];
+            if (res.skipped.length > 0) {
+                lines.push("", "**Skipped / Warnings**:");
+                for (const s of res.skipped)
+                    lines.push(`* ⚠️ ${s}`);
+            }
+            if (res.instructions.length > 0) {
+                lines.push("", "**Next Steps**:");
+                for (const ins of res.instructions)
+                    lines.push(`* ${ins}`);
+            }
+            return {
+                content: [{ type: "text", text: lines.join("\n") }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Failed to install hooks: ${err.message}` }],
+            };
+        }
+    });
+    // 21. dlc_run_hook: Direct Lifecycle Hook Execution
+    server.tool("dlc_run_hook", "Manually execute an AI-DLC lifecycle hook event (session-start, pre-tool, stop, statusline) to evaluate guardrails and context.", {
+        event: z
+            .enum(["session-start", "session-end", "pre-tool", "post-tool", "stop", "statusline"])
+            .describe("Hook event name to execute"),
+        toolName: z.string().optional().describe("Tool name if executing pre-tool"),
+        pathArg: z.string().optional().describe("Path argument if checking pre-tool"),
+    }, async ({ event, toolName, pathArg }) => {
+        try {
+            const res = await executeHook({
+                event: event,
+                toolName,
+                toolArgs: pathArg ? { path: pathArg } : undefined,
+            });
+            const lines = [
+                `# Hook Execution: \`${event}\``,
+                `* **Action**: \`${res.action.toUpperCase()}\``,
+                res.message ? `* **Message**: ${res.message}` : "",
+                res.contextPayload ? `\n## Context Injected:\n\`\`\`\n${res.contextPayload}\n\`\`\`` : "",
+            ].filter(Boolean);
+            return {
+                content: [{ type: "text", text: lines.join("\n") }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Hook execution failed: ${err.message}` }],
             };
         }
     });
