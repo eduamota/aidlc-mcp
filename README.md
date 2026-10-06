@@ -104,6 +104,113 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 
 ---
 
+## 💡 How to Use This MCP
+
+AI-DLC follows the core rule: **"You decide, AI executes."** The assistant acts as a multidisciplinary software engineering team guided by personas and Socratic rubrics, but you remain in the driver's seat at every approval gate.
+
+### The 6-Step Workflow Lifecycle
+
+```
+[1. Kickoff & Scope Detection] ──► [2. Socratic Elicitation] ──► [3. Sensor & Review Verification]
+                                                                                │
+[6. Handover (OUTCOMES.md)]   ◄── [5. Construction & Tests]   ◄── [4. Human Gate Approval]
+```
+
+1. **Diagnostics & Kickoff (`dlc_doctor`, `dlc_init_intent`)**:
+   - Run diagnostics to confirm Git, Node.js, and permissions.
+   - Describe what you want to build. AI-DLC detects one of the 11 adaptive scopes (`feature`, `mvp`, `bugfix`, `infra`, `express`, etc.) or you specify one explicitly.
+   - Creates the workflow record under `aidlc/spaces/default/intents/<intent>/` and tracks live progress in `aidlc-state.md`.
+
+2. **Socratic Elicitation & Drafting (`dlc_check_rubric`, `dlc_submit_draft`)**:
+   - In each stage, the assistant assumes a specialized domain persona (Product Strategist, Systems Architect, DevSecOps Specialist, etc.).
+   - The assistant asks probing questions about non-goals, failure modes, scalability limits, and security trust boundaries.
+   - Deliverables are tested against Socratic rubrics before saving.
+
+3. **Deterministic Verification & Review (`dlc_run_sensors`, `dlc_request_review`)**:
+   - Before human review, deterministic sensors enforce citation provenance (`claim-sources`), required headings (`required-sections`), DAG validity, and upstream coverage.
+   - An independent reviewer pass (§12a) checks completeness and compliance with team standards.
+
+4. **Human Gate Approval (`dlc_approve_gate`)**:
+   - The assistant encounters a **HARD STOP** at each gate.
+   - You inspect the deliverable and either approve it to advance to the next stage, or request changes.
+   - If previous work needs updating, `dlc_reopen_stage` reopens prior checkpoints without losing files.
+
+5. **Construction Phase & Code Generation**:
+   - The Tech Lead decomposes deliverables into a cycle-free DAG of **Units of Work (UoW)**.
+   - **Plan Approval Guard**: Implementation code generation (`code-generation`) is hard-locked until you approve the implementation plan.
+   - The agent implements units sequentially, running compilers, linters, and unit tests.
+
+6. **Closeout, Replay & Handover (`dlc_session_cost`, `dlc_session_replay`, `dlc_outcomes_pack`)**:
+   - Inspect deterministic execution duration, stage outcomes, and sensor counts.
+   - Generate a narrative timeline replay for asynchronous stakeholder review.
+   - Produce a production-ready `OUTCOMES.md` handover document at the workspace root.
+
+---
+
+## 💬 Sample Prompts
+
+Copy and paste these prompts directly into your AI coding assistant (Claude Code, Cursor, Claude Desktop, Antigravity) to trigger structured AI-DLC workflows.
+
+### 1. Workflow Kickoff & Scope Auto-Detection
+> *"Let's start an AI-DLC workflow for our project. First run `dlc_doctor` to verify the workspace health. Then initialize an intent to build a resilient payment webhook ingestion service with idempotency keys and signature validation. Select the appropriate workflow scope."*
+
+> *(For a rapid bugfix)*:
+> *"We have an urgent bug: 'Stripe webhook replay attacks bypassing signature timestamps'. Initialize a surgical AI-DLC bugfix intent and begin Stage 1.1 Intent Capture."*
+
+> *(For a prototype spike)*:
+> *"I want to quickly test feasibility for vector search with pgvector on PostgreSQL. Initialize an AI-DLC workflow with the `poc` scope so we can evaluate this with minimal ceremony."*
+
+---
+
+### 2. Socratic Stage Inquiry & Rubric Probing
+> *"Adopt the Principal Systems Architect persona (`persona_architect_agent`) for Stage 2.5 (Domain Design). Before generating any diagrams, conduct a Socratic inquiry: probe me on our consistency model, failure blast radius, partition key trade-offs, and trust boundaries. Test our draft with `dlc_check_rubric` before submitting."*
+
+---
+
+### 3. Practices Discovery & Memory Layering
+> *"Scan our repository and discover our coding conventions. Inspect our testing frameworks, linters, and TypeScript settings. Record these affirmed standards into `team.md` using `dlc_memory_update` under the appropriate headings."*
+
+> *"Record a new learning from this session: 'We prefer distributed tracing via OpenTelemetry over custom middleware logging'. Log this with `dlc_memory_record_learning`."*
+
+---
+
+### 4. Deterministic Sensors Verification
+> *"Run the deterministic verification sensors on our current stage artifact with `dlc_run_sensors`. Check that all claims carry provenance citations (`[desc]`, `[scope]`, `[memory:...]`), all required template sections exist, and that upstream deliverables from Stage 2.3 are fully covered."*
+
+---
+
+### 5. Independent Reviewer Pass
+> *"Before we proceed to human sign-off, dispatch an independent reviewer pass using `dlc_request_review`. Evaluate our domain architecture artifact against security, observability, and testability. Output a structured verdict with any blocking issues or advisory notes."*
+
+---
+
+### 6. Human Gate Approval
+> *"I have reviewed the architecture artifact, the sensor report, and the reviewer feedback. Everything looks solid. Approve the current stage gate with the note: 'Approved architecture with Redis caching fallbacks' and advance the state machine to the next stage."*
+
+---
+
+### 7. Construction Units of Work (UoW) & Plan Approval
+> *"As the Engineering Tech Lead (`persona_tech_lead`), decompose our functional design into a cycle-free Units of Work DAG. List each unit, its dependencies, and target files. Await my explicit Plan Approval before writing any implementation code."*
+
+---
+
+### 8. Session Metrics, Replay & Handover Pack
+> *(View session cost and progress)*:
+> *"Run `dlc_session_cost` and give me a breakdown of our workflow duration, approved stages by phase, sensor firings, and memory entries."*
+
+> *(Generate executive narrative replay)*:
+> *"Print a session narrative replay using `dlc_session_replay` summarizing all key decisions, trade-offs, and milestones for async review."*
+
+> *(Generate closeout handover pack)*:
+> *"We have finished implementation and all tests pass. Run `dlc_outcomes_pack` with `writeToFile: true` to generate our comprehensive `OUTCOMES.md` handover report at the workspace root."*
+
+---
+
+### 9. Recovery & Stage Reopening
+> *"We discovered a new compliance requirement that affects our initial scope. Use `dlc_reopen_stage` to reopen Stage 2.3 (Requirements Analysis) under the Recovery Protocol without discarding our existing files."*
+
+---
+
 ## 🛠️ MCP Primitives
 
 ### Tools
