@@ -18,6 +18,7 @@ import { getAllSensorSpecs, getSensorSpec } from "../sensors/registry.js";
 import { evaluateRequiredSections, evaluateClaimSources, evaluateTraceabilityJson, evaluateUpstreamCoverage, runStageSensors, } from "./sensors.js";
 import { getAllSkillSpecs, getSkillSpec } from "../skills/registry.js";
 import { computeSessionCost, generateSessionReplay, generateOutcomesPack, } from "./skills.js";
+import { dispatchCli, parseCliArgs } from "../cli/dispatcher.js";
 test("Socratic Rubric Evaluation", () => {
     // 1. Incomplete draft
     const poorContent = "We want an inventory API with GET and POST.";
@@ -619,6 +620,56 @@ test("Skills Registry and Execution", async () => {
         // Verify file written to disk
         const onDisk = await fs.readFile(path.join(tempWs, "OUTCOMES.md"), "utf-8");
         assert.equal(onDisk, content);
+    }
+    finally {
+        await fs.rm(tempWs, { recursive: true, force: true });
+    }
+});
+test("CLI Dispatcher and Argument Parser", async () => {
+    // 1. Argument parsing
+    const parsed1 = parseCliArgs(["doctor", "--json", "--workspace", "/tmp/ws"]);
+    assert.equal(parsed1.command, "doctor");
+    assert.equal(parsed1.flags.json, true);
+    assert.equal(parsed1.flags.workspace, "/tmp/ws");
+    // Upstream runtime summary mapping
+    const parsed2 = parseCliArgs(["engine", "runtime", "summary", "--json"]);
+    assert.equal(parsed2.command, "runtime");
+    assert.equal(parsed2.subcommand, "summary");
+    assert.equal(parsed2.flags.json, true);
+    // 2. Dispatch execution in temp workspace
+    const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-cli-test-"));
+    try {
+        // Test help
+        const helpRes = await dispatchCli(["--help"]);
+        assert.equal(helpRes, true);
+        // Test version
+        const verRes = await dispatchCli(["--version", "--json"]);
+        assert.equal(verRes, true);
+        // Test doctor
+        const docRes = await dispatchCli(["doctor", "--json", "--workspace", tempWs]);
+        assert.equal(docRes, true);
+        // Test sensor list
+        const sensorRes = await dispatchCli(["sensor", "list", "--json"]);
+        assert.equal(sensorRes, true);
+        // Test intent init
+        const initRes = await dispatchCli([
+            "intent",
+            "init",
+            "cli-test-intent",
+            "Test CLI intent",
+            "--scope",
+            "poc",
+            "--workspace",
+            tempWs,
+            "--json",
+        ]);
+        assert.equal(initRes, true);
+        // Test status
+        const statusRes = await dispatchCli(["status", "--workspace", tempWs, "--json"]);
+        assert.equal(statusRes, true);
+        // Test runtime summary
+        const runRes = await dispatchCli(["runtime", "summary", "--workspace", tempWs, "--json"]);
+        assert.equal(runRes, true);
     }
     finally {
         await fs.rm(tempWs, { recursive: true, force: true });

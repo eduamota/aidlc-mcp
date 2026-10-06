@@ -145,6 +145,32 @@ AI-DLC follows the core rule: **"You decide, AI executes."** The assistant acts 
    - Generate a narrative timeline replay for asynchronous stakeholder review.
    - Produce a production-ready `OUTCOMES.md` handover document at the workspace root.
 
+### Dual-Mode Execution: Transparent MCP & Agent CLI
+
+This package runs in **two complementary modes**:
+
+1. **MCP Server Mode (Primary)**:
+   When invoked without arguments (e.g. `npx -y github:doitintl/aidlc-mcp` from Claude Code, Cursor, or Claude Desktop), the server starts over standard I/O (`stdio`) using JSON-RPC 2.0. The AI assistant selects and calls all 32 `dlc_*` tools natively—**completely transparently to the user**.
+
+2. **Agent & Shell CLI Mode (`--json`)**:
+   When an AI agent executes terminal actions via its background shell tool, or when used in Git pre-commit hooks and CI/CD pipelines, subcommands are available directly with machine-readable `--json` output:
+   ```bash
+   # Diagnostics
+   npx github:doitintl/aidlc-mcp doctor --json
+
+   # Live status & current stage
+   npx github:doitintl/aidlc-mcp status --json
+
+   # Deterministic sensor check (exits code 0 on pass, 1 on findings)
+   npx github:doitintl/aidlc-mcp sensor run intent-capture --json
+
+   # Runtime summary (matches upstream skills invocation)
+   npx github:doitintl/aidlc-mcp engine runtime summary --json
+
+   # Handover document generation
+   npx github:doitintl/aidlc-mcp outcomes --write
+   ```
+
 ---
 
 ## 💬 Sample Prompts
