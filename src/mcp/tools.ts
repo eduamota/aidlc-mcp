@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { DlcStateMachine } from "../engine/state-machine.js";
 import { evaluateRubric, STAGE_DEFINITIONS } from "../engine/socratic-rubric.js";
-import { listAllIntents } from "../utils/filesystem.js";
+import { listAllIntents, loadActiveIntentState } from "../utils/filesystem.js";
 import { SCOPES } from "../engine/profiles.js";
 import { scanWorkspaceForReverseEngineering } from "../utils/reverse-engineering.js";
 import { runDlcDoctor } from "../utils/doctor.js";
@@ -11,6 +11,13 @@ import { getStageSpec, getAllStageSpecs } from "../stages/registry.js";
 import { readAuditTrail } from "../engine/audit.js";
 import { executeHook } from "../hooks/runner.js";
 import { installHooks } from "../hooks/installer.js";
+import {
+  resolveActiveMemory,
+  getMemoryRule,
+  updateMemoryRule,
+  recordLearning,
+  readMemoryLayer,
+} from "../utils/memory.js";
 
 const SCOPE_ENUM = [
   "enterprise",
@@ -1033,6 +1040,182 @@ export function registerDlcTools(server: McpServer): void {
         return {
           isError: true,
           content: [{ type: "text", text: `Hook execution failed: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 22. dlc_memory_get: Query Layered Memory Rules or Resolve Composite Memory
+  server.tool(
+    "dlc_memory_get",
+    "Query AI-DLC layered memory rules (org -> team -> project -> phase guardrails) or resolve active composite memory context.",
+    {
+      layer: z
+        .enum([
+          "active",
+          "org",
+          "team",
+          "project",
+          "learnings",
+          "phases/ideation",
+          "phases/inception",
+          "phases/construction",
+          "phases/operation",
+        ])
+        .optional()
+        .default("active")
+        .describe("Memory layer to retrieve: 'active' (composite hierarchy), 'org', 'team', 'project', 'learnings', or specific 'phases/*' guardrails"),
+      heading: z
+        .string()
+        .optional()
+        .describe("Optional H2 section heading to extract (e.g. 'Testing Posture', 'Way of Working', 'Code Completeness')"),
+      phase: z
+        .enum(["ideation", "inception", "construction", "operation"])
+        .optional()
+        .describe("Explicit phase for active guardrails resolution (defaults to active intent's phase)"),
+      space: z.string().optional().describe("AI-DLC space name (defaults to default space)"),
+    },
+    async ({ layer, heading, phase, space }) => {
+      try {
+        if (heading) {
+          const ruleContent = await getMemoryRule(layer === "active" ? "team" : layer, heading, undefined, space);
+          if (!ruleContent) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: `Rule heading '## ${heading}' not found in memory layer '${layer}'.`,
+                },
+              ],
+            };
+          }
+          const targetSpace = space || "default";
+          const citation = `- [memory:M1] aidlc/spaces/${targetSpace}/memory/${layer}.md#${heading}`;
+          return {
+            content: [
+              {
+                type: "text",
+                text: `# Memory Rule: \`${heading}\`\n**Provenance**: \`${citation}\`\n\n${ruleContent}`,
+              },
+            ],
+          };
+        }
+
+        if (layer === "active") {
+          let resolvedPhase = phase;
+          if (!resolvedPhase) {
+            const activeState = await loadActiveIntentState();
+            if (activeState) {
+              const cur = activeState.stages[activeState.currentStageIndex];
+              if (cur && ["ideation", "inception", "construction", "operation"].includes(cur.phase)) {
+                resolvedPhase = cur.phase as any;
+              }
+            }
+          }
+
+          const mem = await resolveActiveMemory({ phase: resolvedPhase, space });
+          return {
+            content: [
+              {
+                type: "text",
+                text: mem.combinedText,
+              },
+            ],
+          };
+        }
+
+        const raw = await readMemoryLayer(layer, undefined, space);
+        return {
+          content: [
+            {
+              type: "text",
+              text: raw || `No content found for memory layer '${layer}'.`,
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to get memory: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 23. dlc_memory_update: Affirm or Update Team/Project Rules
+  server.tool(
+    "dlc_memory_update",
+    "Safely update or append an affirmed rule under a specific H2 heading in team.md or project.md (e.g. from practices-discovery or ADRs).",
+    {
+      layer: z
+        .enum(["team", "project"])
+        .describe("Memory layer to update ('team' for team-wide conventions, 'project' for repo-local constraints)"),
+      heading: z
+        .string()
+        .describe("H2 section heading (e.g. 'Testing Posture', 'Way of Working', 'Mandated', 'Forbidden')"),
+      content: z
+        .string()
+        .describe("Markdown text containing the affirmed rules or standards to persist under this heading"),
+      space: z.string().optional().describe("AI-DLC space name (defaults to default space)"),
+    },
+    async ({ layer, heading, content, space }) => {
+      try {
+        const res = await updateMemoryRule(layer, heading, content, undefined, space);
+        const targetSpace = space || "default";
+        const citation = `- [memory:M1] aidlc/spaces/${targetSpace}/memory/${layer}.md#${heading}`;
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `# ✅ Memory Rule Updated\n* **Layer**: \`${layer}.md\`\n* **Heading**: \`## ${heading}\`\n* **File**: \`${res.filePath}\`\n* **Provenance Tag**: \`${citation}\`\n\n### Updated Content:\n${content.trim()}`,
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to update memory rule: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 24. dlc_memory_record_learning: Log Human Corrections & Discoveries
+  server.tool(
+    "dlc_memory_record_learning",
+    "Record a human correction, architectural discovery, or runtime guidance to learnings.md.",
+    {
+      learning: z.string().describe("Specific human correction, pattern exception, or lesson learned"),
+      stageId: z
+        .string()
+        .optional()
+        .describe("Stage slug/ID during which this was learned (e.g. 'construction/code-generation')"),
+      author: z.string().optional().default("human").describe("Author/originator of the learning"),
+      space: z.string().optional().describe("AI-DLC space name (defaults to default space)"),
+    },
+    async ({ learning, stageId, author, space }) => {
+      try {
+        const res = await recordLearning({
+          learning,
+          stageId,
+          author,
+          space,
+        });
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `# ✅ Learning Recorded in Diary\n* **File**: \`${res.filePath}\`\n* **Author**: \`${author}\`\n${stageId ? `* **Stage**: \`${stageId}\`\n` : ""}* **Entry**: ${learning.trim()}`,
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to record learning: ${err.message}` }],
         };
       }
     }

@@ -33,3 +33,11 @@ export function getKnowledgeDocumentsDir(workspaceDir: string = getWorkspaceDir(
 export function getActiveIntentPointerPath(workspaceDir: string = getWorkspaceDir()): string {
   return path.join(getSpaceDir(workspaceDir), CONFIG.ACTIVE_INTENT_FILE);
 }
+
+export function getMemoryDir(workspaceDir: string = getWorkspaceDir(), space: string = CONFIG.DEFAULT_SPACE): string {
+  return path.join(getSpaceDir(workspaceDir, space), "memory");
+}
+
+export function getMemoryPhasesDir(workspaceDir: string = getWorkspaceDir(), space: string = CONFIG.DEFAULT_SPACE): string {
+  return path.join(getMemoryDir(workspaceDir, space), "phases");
+}

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { CONFIG, getWorkspaceDir, getIntentsDir, getActiveIntentPointerPath } from "../config.js";
+import { ensureMemoryDirs } from "./memory.js";
 /**
  * Generates an intent ID following the YYMMDD-<label> format.
  */
@@ -72,6 +73,7 @@ export function formatAidlcStateMarkdown(state) {
 export async function scaffoldIntent(state, workspaceDir = getWorkspaceDir()) {
     const intentDir = getIntentDirPath(state.intentId, workspaceDir);
     await fs.mkdir(intentDir, { recursive: true });
+    await ensureMemoryDirs(workspaceDir);
     // 1. Write project-description.json
     const descPath = path.join(intentDir, CONFIG.DESCRIPTION_FILE);
     await fs.writeFile(descPath, JSON.stringify({

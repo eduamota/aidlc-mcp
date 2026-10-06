@@ -15,6 +15,7 @@ import {
 import { getAllStageSpecs } from "../stages/registry.js";
 import { getAllCoreKnowledgeDocs } from "../knowledge/registry.js";
 import { readAuditTrail } from "../engine/audit.js";
+import { resolveActiveMemory, readMemoryLayer } from "../utils/memory.js";
 
 export function registerDlcResources(server: McpServer): void {
   // 1. aidlc://state -> aidlc-state.md
@@ -289,6 +290,83 @@ export function registerDlcResources(server: McpServer): void {
       async (uri) => ({
         contents: [{ uri: uri.href, mimeType: "text/markdown", text: doc.content }],
       })
+    );
+  }
+
+  // 14. aidlc://memory/active -> Dynamic composite memory
+  server.registerResource(
+    "aidlc-memory-active",
+    "aidlc://memory/active",
+    {
+      title: "Active Layered Memory",
+      description: "Resolved AI-DLC memory combining org, team, project, and current phase guardrails.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => {
+      const activeState = await loadActiveIntentState();
+      let currentPhase: any = undefined;
+      if (activeState) {
+        const cur = activeState.stages[activeState.currentStageIndex];
+        if (cur && ["ideation", "inception", "construction", "operation"].includes(cur.phase)) {
+          currentPhase = cur.phase;
+        }
+      }
+      const mem = await resolveActiveMemory({ phase: currentPhase });
+      return {
+        contents: [{ uri: uri.href, mimeType: "text/markdown", text: mem.combinedText }],
+      };
+    }
+  );
+
+  // 15. Standard memory layers: org, team, project, learnings
+  const standardLayers = [
+    { name: "org", title: "Organization Defaults (org.md)", desc: "Org-level development practices, trunk-based defaults, and testing floors." },
+    { name: "team", title: "Team Affirmed Practices (team.md)", desc: "Team-level affirmed practices discovered in Stage 2.9 practices-discovery." },
+    { name: "project", title: "Project Local Rules (project.md)", desc: "Project-specific local overrides, patterns, and constraints." },
+    { name: "learnings", title: "Learnings & Corrections Diary (learnings.md)", desc: "Append-only diary of human corrections and discovered rules." },
+  ];
+
+  for (const layer of standardLayers) {
+    server.registerResource(
+      `aidlc-memory-${layer.name}`,
+      `aidlc://memory/${layer.name}`,
+      {
+        title: layer.title,
+        description: layer.desc,
+        mimeType: "text/markdown",
+      },
+      async (uri) => {
+        const text = await readMemoryLayer(layer.name);
+        return {
+          contents: [{ uri: uri.href, mimeType: "text/markdown", text }],
+        };
+      }
+    );
+  }
+
+  // 16. Phase guardrails: aidlc://memory/phases/{phase}
+  const memoryPhases = [
+    { phase: "ideation", title: "Ideation Phase Guardrails", desc: "Guardrails for problem definition, evidence, and scope discipline." },
+    { phase: "inception", title: "Inception Phase Guardrails", desc: "Guardrails for requirements testability, ADR trade-offs, and BDD stories." },
+    { phase: "construction", title: "Construction Phase Guardrails", desc: "Guardrails for code completeness, error handling, and testing standards." },
+    { phase: "operation", title: "Operation Phase Guardrails", desc: "Guardrails for infra safety, rollback procedures, SLOs, and incident response." },
+  ];
+
+  for (const p of memoryPhases) {
+    server.registerResource(
+      `aidlc-memory-phase-${p.phase}`,
+      `aidlc://memory/phases/${p.phase}`,
+      {
+        title: p.title,
+        description: p.desc,
+        mimeType: "text/markdown",
+      },
+      async (uri) => {
+        const text = await readMemoryLayer(`phases/${p.phase}`);
+        return {
+          contents: [{ uri: uri.href, mimeType: "text/markdown", text }],
+        };
+      }
     );
   }
 }

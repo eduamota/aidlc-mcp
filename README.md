@@ -41,6 +41,11 @@ It equips AI coding assistants (Claude Code, Cursor, Codex CLI, Antigravity, Kir
 5. **Diagnostic Doctor (`dlc_doctor`)**:
    - Health check verifying Node.js runtime, Git repository, filesystem write permissions, active space, and intent state.
 
+6. **Three-Tier Layered Memory Subsystem (`aidlc/spaces/default/memory/`)**:
+   - **Hierarchy**: `org.md` (org trunk-based development & testing defaults) -> `team.md` (affirmed team practices from Stage 2.9 `practices-discovery`) -> `project.md` (repo-local constraints).
+   - **Phase Guardrails**: `phases/{ideation,inception,construction,operation}.md` loaded dynamically based on active intent phase.
+   - **Self-Learning Diary**: `learnings.md` records runtime human corrections and architectural discoveries with exact citations (`- [memory:M<n>] aidlc/spaces/<space>/memory/<layer>.md#<heading>`).
+
 ---
 
 ## 🚀 Quick Start
@@ -118,6 +123,9 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `dlc_get_audit_trail` | Inspect the append-only audit trail and lifecycle event log (`audit/audit.jsonl`). |
 | `dlc_install_hooks` | Install client lifecycle hooks into Claude Code, Cursor, or Git. |
 | `dlc_run_hook` | Manually execute a lifecycle hook event (`session-start`, `pre-tool`, `stop`, `statusline`). |
+| `dlc_memory_get` | Query layered memory rules (`org`, `team`, `project`, `phases/*`) or resolve composite active memory. |
+| `dlc_memory_update` | Affirm or update team-wide or project-local rules under specific H2 headings (`team.md`, `project.md`). |
+| `dlc_memory_record_learning` | Record runtime human corrections and architectural discoveries to `learnings.md`. |
 
 ### Prompts
 | Prompt | Description |
@@ -148,6 +156,9 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `aidlc://audit` | Append-only audit trail of lifecycle events (`audit.jsonl`). |
 | `aidlc://stages/catalog` | Metadata catalog for all 33 official stages from `core/aidlc-common/stages/`. |
 | `aidlc://stages/{slug}` | Verbatim markdown execution guide & frontmatter for any stage (e.g. `domain-design`). |
+| `aidlc://memory/active` | Composite active memory resolved from org, team, project, and current stage phase. |
+| `aidlc://memory/{org,team,project,learnings}` | Direct access to individual memory layer rules and corrections diary. |
+| `aidlc://memory/phases/{phase}` | Phase-specific guardrails for `ideation`, `inception`, `construction`, or `operation`. |
 | `aidlc://protocols/stage-protocol` | Voice contract, HARD STOP approval gate rules, atomic stage ritual. |
 | `aidlc://protocols/reviewer-protocol` | Independent reviewer invocation protocol (§12a) and verdict schema. |
 | `aidlc://protocols/construction-protocol` | Units of Work (UoW) DAG execution, Plan Approval, build-and-test loopback. |

@@ -13,3 +13,5 @@ export declare function getIntentsDir(workspaceDir?: string, space?: string): st
 export declare function getKnowledgeDir(workspaceDir?: string, space?: string): string;
 export declare function getKnowledgeDocumentsDir(workspaceDir?: string, space?: string): string;
 export declare function getActiveIntentPointerPath(workspaceDir?: string): string;
+export declare function getMemoryDir(workspaceDir?: string, space?: string): string;
+export declare function getMemoryPhasesDir(workspaceDir?: string, space?: string): string;

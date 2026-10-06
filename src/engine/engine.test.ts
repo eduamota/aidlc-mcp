@@ -18,6 +18,14 @@ import { getStageSpec, getAllStageSpecs } from "../stages/registry.js";
 import { readAuditTrail, appendAuditLog } from "./audit.js";
 import { executeHook } from "../hooks/runner.js";
 import { installHooks } from "../hooks/installer.js";
+import {
+  ensureMemoryDirs,
+  resolveActiveMemory,
+  getMemoryRule,
+  updateMemoryRule,
+  recordLearning,
+  readMemoryLayer,
+} from "../utils/memory.js";
 
 test("Socratic Rubric Evaluation", () => {
   // 1. Incomplete draft
@@ -446,6 +454,66 @@ test("AI-DLC Lifecycle Hooks Runner and Installer", async () => {
     await fs.rm(tempWs, { recursive: true, force: true });
   }
 });
+
+test("AI-DLC Memory Subsystem: 3-Tier Layering, Phase Guardrails, and Learnings", async () => {
+  const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-memory-"));
+
+  try {
+    // 1. Ensure memory dirs and seed defaults
+    await ensureMemoryDirs(tempWs);
+    const orgContent = await readMemoryLayer("org", tempWs);
+    assert.ok(orgContent.includes("Org-Level Rules"), "Should seed org.md default");
+    assert.ok(orgContent.includes("trunk-based development"));
+
+    const teamContent = await readMemoryLayer("team", tempWs);
+    assert.ok(teamContent.includes("Team-Level Rules"));
+
+    // 2. Resolve active memory with phase guardrails
+    const activeConstruction = await resolveActiveMemory({
+      phase: "construction",
+      workspaceDir: tempWs,
+    });
+    assert.ok(activeConstruction.combinedText.includes("1. Organization-Level Defaults (org.md)"));
+    assert.ok(activeConstruction.combinedText.includes("2. Team-Level Affirmed Rules (team.md)"));
+    assert.ok(activeConstruction.combinedText.includes("3. Project-Level Local Rules (project.md)"));
+    assert.ok(activeConstruction.combinedText.includes("4. Phase Guardrails (construction.md)"));
+    assert.ok(activeConstruction.combinedText.includes("Code Completeness"));
+
+    // 3. Query specific rule heading [memory:M<n>]
+    const wayOfWorking = await getMemoryRule("org", "Way of Working", tempWs);
+    assert.ok(wayOfWorking?.includes("trunk-based development"));
+
+    const missingRule = await getMemoryRule("org", "Non-Existent-Heading", tempWs);
+    assert.equal(missingRule, null);
+
+    // 4. Update memory rule (e.g. practices-discovery affirmation)
+    const updateRes = await updateMemoryRule(
+      "team",
+      "Testing Posture",
+      "- **Methodology**: TDD\n- **Ordering**: test-first\n- **Coverage floor**: 95%",
+      tempWs
+    );
+    assert.equal(updateRes.success, true);
+
+    const updatedTesting = await getMemoryRule("team", "Testing Posture", tempWs);
+    assert.ok(updatedTesting?.includes("**Coverage floor**: 95%"));
+
+    // 5. Append learning / human correction
+    const learnRes = await recordLearning({
+      learning: "Always use structured JSON error logs when deploying to AWS Lambda.",
+      stageId: "construction/code-generation",
+      workspaceDir: tempWs,
+    });
+    assert.equal(learnRes.success, true);
+
+    const learningsContent = await readMemoryLayer("learnings", tempWs);
+    assert.ok(learningsContent.includes("Always use structured JSON error logs"));
+    assert.ok(learningsContent.includes("construction/code-generation"));
+  } finally {
+    await fs.rm(tempWs, { recursive: true, force: true });
+  }
+});
+
 
 
 
