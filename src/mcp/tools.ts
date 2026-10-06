@@ -3,7 +3,7 @@ import { z } from "zod";
 import { DlcStateMachine } from "../engine/state-machine.js";
 import { evaluateRubric, STAGE_DEFINITIONS } from "../engine/socratic-rubric.js";
 import { listAllIntents, loadActiveIntentState } from "../utils/filesystem.js";
-import { SCOPES } from "../engine/profiles.js";
+import { SCOPES, detectScopeFromPrompt, getScopeSpec, getAllScopeSpecs } from "../engine/profiles.js";
 import { scanWorkspaceForReverseEngineering } from "../utils/reverse-engineering.js";
 import { runDlcDoctor } from "../utils/doctor.js";
 import { addKnowledgeDocument, listKnowledgeDocuments, readKnowledgeDocument } from "../utils/knowledge.js";
@@ -19,7 +19,7 @@ import {
   readMemoryLayer,
 } from "../utils/memory.js";
 
-const SCOPE_ENUM = [
+const SCOPE_ENUM_STRICT = [
   "enterprise",
   "feature",
   "mvp",
@@ -31,6 +31,11 @@ const SCOPE_ENUM = [
   "classic",
   "workshop",
   "express",
+] as const;
+
+const SCOPE_ENUM = [
+  "auto",
+  ...SCOPE_ENUM_STRICT,
 ] as const;
 
 export function registerDlcTools(server: McpServer): void {
@@ -80,8 +85,8 @@ export function registerDlcTools(server: McpServer): void {
       scope: z
         .enum(SCOPE_ENUM)
         .optional()
-        .default("feature")
-        .describe("Workflow scope profile: enterprise (33 stages), feature (33), mvp (23), poc (8), bugfix (9), refactor (10), infra (13), security-patch (10), classic (18), workshop (26), express (10)"),
+        .default("auto")
+        .describe("Workflow scope profile: 'auto' (detects based on description/keywords), enterprise (33 stages), feature (33), mvp (23), poc (8), bugfix (9), refactor (10), infra (13), security-patch (10), classic (18), workshop (26), express (10)"),
       depth: z
         .enum(["comprehensive", "standard", "minimal"])
         .optional()
@@ -106,10 +111,15 @@ export function registerDlcTools(server: McpServer): void {
           resolvedType = projectType;
         }
 
+        let resolvedScope = scope;
+        if (resolvedScope === "auto") {
+          resolvedScope = detectScopeFromPrompt(`${label} ${description}`) || "feature";
+        }
+
         const { intent, intentDir } = await DlcStateMachine.initIntent({
           label,
           description,
-          profile: scope,
+          profile: resolvedScope as any,
           projectType: resolvedType,
           depth,
           testStrategy,
@@ -1216,6 +1226,57 @@ export function registerDlcTools(server: McpServer): void {
         return {
           isError: true,
           content: [{ type: "text", text: `Failed to record learning: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 25. dlc_get_scope_spec: Scope Specification & Execution Policies
+  server.tool(
+    "dlc_get_scope_spec",
+    "Retrieve the official AI-DLC scope specification, policies (skeleton, guardPolicy, reviewCap, sensors, learnings), and rationale for any of the 11 workflow scopes.",
+    {
+      scope: z.enum(SCOPE_ENUM_STRICT).describe("Scope name to inspect"),
+    },
+    async ({ scope }) => {
+      try {
+        const spec = getScopeSpec(scope);
+        if (!spec) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: `Scope '${scope}' not found.` }],
+          };
+        }
+
+        const lines = [
+          `# AI-DLC Scope: \`${spec.name}\``,
+          `* **Depth**: \`${spec.depth}\``,
+          `* **Test Strategy**: \`${spec.testStrategy}\``,
+          `* **Description**: ${spec.description}`,
+          `* **Walking Skeleton**: \`${spec.skeleton}\``,
+          `* **Guard Policy**: \`${spec.guardPolicy}\``,
+          `* **Review Cap**: \`${spec.reviewCap || "advisory"}\``,
+          `* **Sensors**: \`${spec.sensors}\``,
+          `* **Learnings**: \`${spec.learnings}\``,
+          `* **Summary Confirmation**: \`${spec.summaryConfirmation}\``,
+          `* **Plan Approval**: \`${spec.planApproval}\``,
+          `* **Collaborators**: \`${spec.collaborators}\``,
+          spec.keywords.length > 0
+            ? `* **Keyword Triggers**: ${spec.keywords.map((k) => `\`${k}\``).join(", ")}`
+            : "* **Keyword Triggers**: *(None - selected explicitly or as fallback)*",
+          "",
+          "---",
+          "",
+          spec.markdown,
+        ];
+
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to get scope spec: ${err.message}` }],
         };
       }
     }

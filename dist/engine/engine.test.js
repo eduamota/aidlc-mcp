@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { DlcStateMachine } from "./state-machine.js";
 import { evaluateRubric } from "./socratic-rubric.js";
-import { SCOPES, createStagesForScope } from "./profiles.js";
+import { SCOPES, createStagesForScope, getScopeSpec, getAllScopeSpecs, detectScopeFromPrompt } from "./profiles.js";
 import { runDlcDoctor } from "../utils/doctor.js";
 import { addKnowledgeDocument, listKnowledgeDocuments, readKnowledgeDocument } from "../utils/knowledge.js";
 import { STAGE_PROTOCOL, REVIEWER_PROTOCOL, CONSTRUCTION_PROTOCOL, RECOVERY_PROTOCOL, } from "./protocols.js";
@@ -41,7 +41,7 @@ Without this real-time inventory system, over-selling occurs daily causing churn
     assert.equal(eval2.unresolvedProbes.length, 0, "All probes should be resolved");
     assert.equal(eval2.score, 1.0);
 });
-test("The 11 AI-DLC Core Scopes and Stage Routing", () => {
+test("The 11 AI-DLC Core Scopes, Specifications, and Keyword Routing", () => {
     const scopeKeys = Object.keys(SCOPES);
     assert.equal(scopeKeys.length, 11, "Should support all 11 core scopes");
     // Verify enterprise has all stages
@@ -55,6 +55,31 @@ test("The 11 AI-DLC Core Scopes and Stage Routing", () => {
     assert.equal(greenStages.some((s) => s.id === "reverse-engineering"), false);
     const brownStages = createStagesForScope("poc", "brownfield");
     assert.equal(brownStages.some((s) => s.id === "reverse-engineering"), true);
+    // Verify official ScopeSpec catalog
+    const allSpecs = getAllScopeSpecs();
+    assert.equal(allSpecs.length, 11, "All 11 official scope markdown specs must be present");
+    const entSpec = getScopeSpec("enterprise");
+    assert.ok(entSpec);
+    assert.equal(entSpec.guardPolicy, "strict");
+    assert.equal(entSpec.depth, "comprehensive");
+    assert.equal(entSpec.skeleton, "on");
+    const expSpec = getScopeSpec("express");
+    assert.ok(expSpec);
+    assert.equal(expSpec.skeleton, "off");
+    assert.equal(expSpec.reviewCap, "none");
+    assert.equal(expSpec.planApproval, "off");
+    // Verify attached ScopeSpec in SCOPES map
+    assert.ok(SCOPES.bugfix.spec);
+    assert.equal(SCOPES.bugfix.spec.name, "bugfix");
+    assert.equal(SCOPES.bugfix.spec.skeleton, "off");
+    // Verify keyword auto-detection
+    assert.equal(detectScopeFromPrompt("Please fix the critical broken authentication bug"), "bugfix");
+    assert.equal(detectScopeFromPrompt("Refactor and clean up the legacy payment client"), "refactor");
+    assert.equal(detectScopeFromPrompt("Urgent response to patch CVE-2026-9999 security vulnerability"), "security-patch");
+    assert.equal(detectScopeFromPrompt("Build a quick prototype spike for user retention"), "poc");
+    assert.equal(detectScopeFromPrompt("Deploy cloud infrastructure resources with CDK"), "infra");
+    assert.equal(detectScopeFromPrompt("Express lightweight script without design ceremony"), "express");
+    assert.equal(detectScopeFromPrompt("Generic task with no trigger words"), undefined);
 });
 test("AI-DLC Lifecycle State Machine Flow", async () => {
     const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-test-"));

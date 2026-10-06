@@ -1,4 +1,6 @@
 import { ScopeType, ProjectType, DepthLevel, TestStrategy, StageState } from "../types.js";
+import { getScopeSpec, getAllScopeSpecs, detectScopeFromPrompt, ScopeSpec } from "../scopes/registry.js";
+export { getScopeSpec, getAllScopeSpecs, detectScopeFromPrompt, ScopeSpec };
 export interface ScopeDefinition {
     type: ScopeType;
     name: string;
@@ -6,6 +8,7 @@ export interface ScopeDefinition {
     defaultDepth: DepthLevel;
     defaultTestStrategy: TestStrategy;
     stageIds: string[];
+    spec?: ScopeSpec;
 }
 export declare const SCOPES: Record<ScopeType, ScopeDefinition>;
 export declare const PROFILES: Record<ScopeType, ScopeDefinition>;

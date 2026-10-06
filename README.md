@@ -126,6 +126,7 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `dlc_memory_get` | Query layered memory rules (`org`, `team`, `project`, `phases/*`) or resolve composite active memory. |
 | `dlc_memory_update` | Affirm or update team-wide or project-local rules under specific H2 headings (`team.md`, `project.md`). |
 | `dlc_memory_record_learning` | Record runtime human corrections and architectural discoveries to `learnings.md`. |
+| `dlc_get_scope_spec` | Retrieve the official specification, execution policies, frontmatter, and rationale for any scope. |
 
 ### Prompts
 | Prompt | Description |
@@ -151,6 +152,8 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `aidlc://active-intent` | JSON metadata of active intent. |
 | `aidlc://rubrics` | Complete catalog of 33 stage rubrics and probing dimensions. |
 | `aidlc://scopes` | Scope routing matrix and stage sequences. |
+| `aidlc://scopes/catalog` | Metadata catalog for all 11 official scopes from `core/scopes/`. |
+| `aidlc://scopes/{scope}` | Verbatim markdown execution specification & YAML frontmatter for any scope (e.g. `express`, `bugfix`). |
 | `aidlc://knowledge` | Catalog and index of all 59 core engineering guides + workspace documents. |
 | `aidlc://knowledge/{agent}/{doc}` | Direct markdown access to any core playbook (e.g. `aidlc-architect-agent/ddd-patterns.md`). |
 | `aidlc://audit` | Append-only audit trail of lifecycle events (`audit.jsonl`). |

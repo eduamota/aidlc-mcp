@@ -1,4 +1,6 @@
 import { STAGE_DEFINITIONS } from "./socratic-rubric.js";
+import { getScopeSpec, getAllScopeSpecs, detectScopeFromPrompt } from "../scopes/registry.js";
+export { getScopeSpec, getAllScopeSpecs, detectScopeFromPrompt };
 export const SCOPES = {
     enterprise: {
         type: "enterprise",
@@ -260,6 +262,10 @@ export const SCOPES = {
         ],
     },
 };
+// Attach official ScopeSpec to each scope definition
+for (const [key, scope] of Object.entries(SCOPES)) {
+    scope.spec = getScopeSpec(key);
+}
 // Backward-compatibility alias
 export const PROFILES = SCOPES;
 /**

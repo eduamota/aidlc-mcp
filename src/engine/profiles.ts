@@ -1,5 +1,8 @@
 import { ScopeType, ProjectType, DepthLevel, TestStrategy, StageState } from "../types.js";
 import { STAGE_DEFINITIONS } from "./socratic-rubric.js";
+import { getScopeSpec, getAllScopeSpecs, detectScopeFromPrompt, ScopeSpec } from "../scopes/registry.js";
+
+export { getScopeSpec, getAllScopeSpecs, detectScopeFromPrompt, ScopeSpec };
 
 export interface ScopeDefinition {
   type: ScopeType;
@@ -8,6 +11,7 @@ export interface ScopeDefinition {
   defaultDepth: DepthLevel;
   defaultTestStrategy: TestStrategy;
   stageIds: string[];
+  spec?: ScopeSpec;
 }
 
 export const SCOPES: Record<ScopeType, ScopeDefinition> = {
@@ -281,6 +285,11 @@ export const SCOPES: Record<ScopeType, ScopeDefinition> = {
     ],
   },
 };
+
+// Attach official ScopeSpec to each scope definition
+for (const [key, scope] of Object.entries(SCOPES)) {
+  scope.spec = getScopeSpec(key);
+}
 
 // Backward-compatibility alias
 export const PROFILES = SCOPES;

@@ -4,7 +4,7 @@ import path from "node:path";
 import { loadActiveIntentState, getIntentDirPath } from "../utils/filesystem.js";
 import { CONFIG } from "../config.js";
 import { STAGE_DEFINITIONS } from "../engine/socratic-rubric.js";
-import { SCOPES } from "../engine/profiles.js";
+import { SCOPES, getAllScopeSpecs, getScopeSpec } from "../engine/profiles.js";
 import { listKnowledgeDocuments } from "../utils/knowledge.js";
 import {
   STAGE_PROTOCOL,
@@ -367,6 +367,54 @@ export function registerDlcResources(server: McpServer): void {
           contents: [{ uri: uri.href, mimeType: "text/markdown", text }],
         };
       }
+    );
+  }
+
+  // 17. aidlc://scopes/catalog -> JSON Catalog of all 11 scopes
+  server.registerResource(
+    "aidlc-scopes-catalog",
+    "aidlc://scopes/catalog",
+    {
+      title: "AI-DLC Scope Catalog",
+      description: "Structured JSON metadata of all 11 AI-DLC scopes, policies, keyword triggers, and defaults.",
+      mimeType: "application/json",
+    },
+    async (uri) => {
+      const all = getAllScopeSpecs().map((s) => ({
+        name: s.name,
+        depth: s.depth,
+        testStrategy: s.testStrategy,
+        description: s.description,
+        skeleton: s.skeleton,
+        guardPolicy: s.guardPolicy,
+        reviewCap: s.reviewCap || "advisory",
+        sensors: s.sensors,
+        learnings: s.learnings,
+        summaryConfirmation: s.summaryConfirmation,
+        planApproval: s.planApproval,
+        collaborators: s.collaborators,
+        keywords: s.keywords,
+        resourceUri: `aidlc://scopes/${s.name}`,
+      }));
+      return {
+        contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(all, null, 2) }],
+      };
+    }
+  );
+
+  // 18. Individual scope resources aidlc://scopes/{scope}
+  for (const spec of getAllScopeSpecs()) {
+    server.registerResource(
+      `aidlc-scope-${spec.name}`,
+      `aidlc://scopes/${spec.name}`,
+      {
+        title: `Scope Specification: ${spec.name}`,
+        description: `Official AI-DLC scope specification, policies, and rationale for ${spec.name}.`,
+        mimeType: "text/markdown",
+      },
+      async (uri) => ({
+        contents: [{ uri: uri.href, mimeType: "text/markdown", text: spec.markdown }],
+      })
     );
   }
 }
