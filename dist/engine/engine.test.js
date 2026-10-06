@@ -16,6 +16,8 @@ import { installHooks } from "../hooks/installer.js";
 import { ensureMemoryDirs, resolveActiveMemory, getMemoryRule, updateMemoryRule, recordLearning, readMemoryLayer, } from "../utils/memory.js";
 import { getAllSensorSpecs, getSensorSpec } from "../sensors/registry.js";
 import { evaluateRequiredSections, evaluateClaimSources, evaluateTraceabilityJson, evaluateUpstreamCoverage, runStageSensors, } from "./sensors.js";
+import { getAllSkillSpecs, getSkillSpec } from "../skills/registry.js";
+import { computeSessionCost, generateSessionReplay, generateOutcomesPack, } from "./skills.js";
 test("Socratic Rubric Evaluation", () => {
     // 1. Incomplete draft
     const poorContent = "We want an inventory API with GET and POST.";
@@ -558,6 +560,65 @@ According to team rules [memory:team#Testing], tests must be automated.
         });
         assert.equal(report.overallPass, true);
         assert.ok(report.results.length >= 2);
+    }
+    finally {
+        await fs.rm(tempWs, { recursive: true, force: true });
+    }
+});
+test("Skills Registry and Execution", async () => {
+    // 1. Registry specs
+    const allSkills = getAllSkillSpecs();
+    assert.equal(allSkills.length, 4, "Should have 4 official skills");
+    const expectedSkills = [
+        "aidlc-outcomes-pack",
+        "aidlc-replay",
+        "aidlc-session-cost",
+        "aidlc-knowledge",
+    ];
+    for (const name of expectedSkills) {
+        const spec = getSkillSpec(name);
+        assert.ok(spec, `Skill ${name} should be registered`);
+        assert.equal(spec.name, name);
+        assert.ok(spec.description.length > 5);
+        assert.ok(spec.markdown.includes(name));
+        assert.ok(spec.classification === "read-only" || spec.classification === "read-write");
+    }
+    // 2. Skills Engine Operations
+    const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-skills-test-"));
+    try {
+        const { intent } = await DlcStateMachine.initIntent({
+            label: "order-service",
+            description: "Scalable order ingestion and validation microservice",
+            profile: "mvp",
+            workspaceDir: tempWs,
+        });
+        // Test computeSessionCost
+        const cost = await computeSessionCost(intent.intentId, tempWs);
+        assert.equal(cost.workflow_id, intent.intentId);
+        assert.equal(cost.scope, "mvp");
+        assert.ok(cost.stages.total > 0);
+        assert.equal(cost.stages.approved, 0);
+        assert.equal(cost.stages.pending, cost.stages.total);
+        assert.ok(cost.by_phase.ideation);
+        // Test generateSessionReplay
+        const replay = await generateSessionReplay(intent.intentId, tempWs);
+        assert.ok(replay.includes("# Session Replay"));
+        assert.ok(replay.includes("order-service"));
+        assert.ok(replay.includes("## Executive Summary"));
+        assert.ok(replay.includes("## Timeline"));
+        // Test generateOutcomesPack
+        const { content, filePath } = await generateOutcomesPack({
+            intentId: intent.intentId,
+            workspaceDir: tempWs,
+            writeToFile: true,
+        });
+        assert.ok(content.includes("# Outcomes Pack"));
+        assert.ok(content.includes("## 1. What Was Built"));
+        assert.ok(content.includes("## 2. Key Architectural Decisions"));
+        assert.ok(filePath);
+        // Verify file written to disk
+        const onDisk = await fs.readFile(path.join(tempWs, "OUTCOMES.md"), "utf-8");
+        assert.equal(onDisk, content);
     }
     finally {
         await fs.rm(tempWs, { recursive: true, force: true });

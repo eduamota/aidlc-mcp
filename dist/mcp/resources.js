@@ -11,6 +11,8 @@ import { getAllCoreKnowledgeDocs } from "../knowledge/registry.js";
 import { readAuditTrail } from "../engine/audit.js";
 import { resolveActiveMemory, readMemoryLayer } from "../utils/memory.js";
 import { getAllSensorSpecs } from "../sensors/registry.js";
+import { getAllSkillSpecs } from "../skills/registry.js";
+import { computeSessionCost, generateSessionReplay, generateOutcomesPack, } from "../engine/skills.js";
 export function registerDlcResources(server) {
     // 1. aidlc://state -> aidlc-state.md
     server.registerResource("aidlc-state", "aidlc://state", {
@@ -331,5 +333,105 @@ export function registerDlcResources(server) {
             contents: [{ uri: uri.href, mimeType: "text/markdown", text: spec.markdown }],
         }));
     }
+    // 21. aidlc://skills/catalog -> Catalog of all 4 AI-DLC skills
+    server.registerResource("aidlc-skills-catalog", "aidlc://skills/catalog", {
+        title: "AI-DLC Skills Catalog",
+        description: "Structured JSON metadata of all AI-DLC skills, argument hints, and invocation contracts.",
+        mimeType: "application/json",
+    }, async (uri) => {
+        const all = getAllSkillSpecs().map((s) => ({
+            name: s.name,
+            description: s.description,
+            argumentHint: s.argumentHint,
+            userInvocable: s.userInvocable,
+            classification: s.classification,
+            resourceUri: `aidlc://skills/${s.name}`,
+        }));
+        return {
+            contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(all, null, 2) }],
+        };
+    });
+    // 22. Individual skill resources aidlc://skills/{name}
+    for (const spec of getAllSkillSpecs()) {
+        server.registerResource(`aidlc-skill-${spec.name}`, `aidlc://skills/${spec.name}`, {
+            title: `Skill Specification: ${spec.name}`,
+            description: `Official SKILL.md specification and instructions for ${spec.name}.`,
+            mimeType: "text/markdown",
+        }, async (uri) => ({
+            contents: [{ uri: uri.href, mimeType: "text/markdown", text: spec.markdown }],
+        }));
+    }
+    // 23. aidlc://outcomes -> Dynamic OUTCOMES.md Handover Pack
+    server.registerResource("aidlc-outcomes", "aidlc://outcomes", {
+        title: "Active Intent Outcomes Pack",
+        description: "Comprehensive handover report (OUTCOMES.md) generated deterministically for the active intent.",
+        mimeType: "text/markdown",
+    }, async (uri) => {
+        try {
+            const { content } = await generateOutcomesPack({ writeToFile: false });
+            return {
+                contents: [{ uri: uri.href, mimeType: "text/markdown", text: content }],
+            };
+        }
+        catch (err) {
+            return {
+                contents: [
+                    {
+                        uri: uri.href,
+                        mimeType: "text/markdown",
+                        text: `# AI-DLC Outcomes Pack\nUnable to generate outcomes pack: ${err.message}`,
+                    },
+                ],
+            };
+        }
+    });
+    // 24. aidlc://session-replay -> Dynamic Narrative Session Replay
+    server.registerResource("aidlc-session-replay", "aidlc://session-replay", {
+        title: "Active Intent Session Replay",
+        description: "Structured session replay narrative generated from audit shards and artifacts.",
+        mimeType: "text/markdown",
+    }, async (uri) => {
+        try {
+            const replay = await generateSessionReplay();
+            return {
+                contents: [{ uri: uri.href, mimeType: "text/markdown", text: replay }],
+            };
+        }
+        catch (err) {
+            return {
+                contents: [
+                    {
+                        uri: uri.href,
+                        mimeType: "text/markdown",
+                        text: `# AI-DLC Session Replay\nUnable to generate session replay: ${err.message}`,
+                    },
+                ],
+            };
+        }
+    });
+    // 25. aidlc://session-cost -> Dynamic Deterministic Session Cost Report
+    server.registerResource("aidlc-session-cost", "aidlc://session-cost", {
+        title: "Active Intent Session Cost",
+        description: "Deterministic runtime summary and cost metrics for the active intent.",
+        mimeType: "application/json",
+    }, async (uri) => {
+        try {
+            const cost = await computeSessionCost();
+            return {
+                contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(cost, null, 2) }],
+            };
+        }
+        catch (err) {
+            return {
+                contents: [
+                    {
+                        uri: uri.href,
+                        mimeType: "application/json",
+                        text: JSON.stringify({ error: err.message }, null, 2),
+                    },
+                ],
+            };
+        }
+    });
 }
 //# sourceMappingURL=resources.js.map

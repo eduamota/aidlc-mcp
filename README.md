@@ -136,6 +136,11 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `dlc_get_scope_spec` | Retrieve the official specification, execution policies, frontmatter, and rationale for any scope. |
 | `dlc_run_sensors` | Execute deterministic AI-DLC sensors (claim-sources, required-sections, traceability, upstream-coverage). |
 | `dlc_get_sensor_spec` | Retrieve official contracts, trigger events, and failure modes for any of the 6 sensors. |
+| `dlc_session_cost` | Read-only session cost & execution metrics view (duration, stages, memory, sensors, learnings). |
+| `dlc_session_replay` | Print structured session narrative replay for stakeholders who weren't present without mutating state. |
+| `dlc_outcomes_pack` | Generate comprehensive handover document (`OUTCOMES.md`) at workflow close. |
+| `dlc_get_skill_spec` | Retrieve official `SKILL.md` specification and argument hints for any AI-DLC skill. |
+| `dlc_install_skills` | Export AI-DLC skills into agent tool directories (`.cursor/skills`, `.claude/skills`, `.agents/skills`). |
 
 ### Prompts
 | Prompt | Description |
@@ -165,6 +170,11 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `aidlc://scopes/{scope}` | Verbatim markdown execution specification & YAML frontmatter for any scope (e.g. `express`, `bugfix`). |
 | `aidlc://sensors/catalog` | Metadata catalog for all 6 deterministic sensors from `core/sensors/`. |
 | `aidlc://sensors/{id}` | Verbatim markdown specification for any sensor (`claim-sources`, `required-sections`, etc.). |
+| `aidlc://skills/catalog` | Metadata catalog for all 4 official skills from `core/skills/`. |
+| `aidlc://skills/{name}` | Verbatim markdown specification & argument hint for any skill (`aidlc-outcomes-pack`, `aidlc-replay`, etc.). |
+| `aidlc://outcomes` | Dynamic handover report (`OUTCOMES.md`) generated deterministically for the active intent. |
+| `aidlc://session-replay` | Dynamic structured session replay narrative generated from audit shards and artifacts. |
+| `aidlc://session-cost` | Deterministic runtime metrics and session cost report for the active intent. |
 | `aidlc://knowledge` | Catalog and index of all 59 core engineering guides + workspace documents. |
 | `aidlc://knowledge/{agent}/{doc}` | Direct markdown access to any core playbook (e.g. `aidlc-architect-agent/ddd-patterns.md`). |
 | `aidlc://audit` | Append-only audit trail of lifecycle events (`audit.jsonl`). |
@@ -212,6 +222,21 @@ Run `dlc_install_hooks({ target: "all" })` or use CLI subcommands:
 * **`pre-tool`**: Refuses raw edits to state files or audit logs outside workflow verbs.
 * **`stop`**: Validates the continuation loop, allowing turn stops only at genuine approval gates or question prompts.
 * **`statusline`**: Displays real-time stage and gate status in the CLI status bar.
+
+---
+
+## 🧠 Official AI-DLC Skills Subsystem
+
+The server bundles the official skills specifications and execution engines from upstream `core/skills/`:
+
+| Skill | Classification | Purpose & Behavior |
+|---|---|---|
+| `aidlc-outcomes-pack` | `read-only` | Generates a comprehensive handover document (`OUTCOMES.md`) at workflow close covering architecture decisions, setup guides, repository structure, and footprint. Sourced deterministically from runtime metrics and deliverables. |
+| `aidlc-replay` | `read-only` | Terminal narrative replay for async review and stakeholders who weren't in the room. Synthesizes audit shards and stage events into an executive summary and milestone timeline without mutating state. |
+| `aidlc-session-cost` | `read-only` | Transparent deterministic session cost view: duration, stage outcomes (approved/failed/pending), phase rollup, memory counts, sensor firings, and captured learnings. |
+| `aidlc-knowledge` | `read-write` (catalog only) | Document knowledge catalog management: indexes team PDFs, Word, Markdown, and text files under workspace lock. Never advances workflow stage pointer or mutates stage state. |
+
+Skills can be retrieved via `dlc_get_skill_spec`, inspected dynamically via `aidlc://skills/...`, executed via dedicated MCP tools (`dlc_outcomes_pack`, `dlc_session_replay`, `dlc_session_cost`), or exported to assistant workspaces (`.cursor/skills`, `.claude/skills`, `.agents/skills`) using `dlc_install_skills`.
 
 ---
 

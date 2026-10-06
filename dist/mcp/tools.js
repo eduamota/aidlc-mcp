@@ -16,6 +16,14 @@ import { getWorkspaceDir } from "../config.js";
 import { resolveActiveMemory, getMemoryRule, updateMemoryRule, recordLearning, readMemoryLayer, } from "../utils/memory.js";
 import { runStageSensors } from "../engine/sensors.js";
 import { getSensorSpec } from "../sensors/registry.js";
+import { computeSessionCost, generateSessionReplay, generateOutcomesPack, } from "../engine/skills.js";
+import { getSkillSpec } from "../skills/registry.js";
+const SKILL_ENUM = [
+    "aidlc-outcomes-pack",
+    "aidlc-replay",
+    "aidlc-session-cost",
+    "aidlc-knowledge",
+];
 const SENSOR_ENUM = [
     "claim-sources",
     "required-sections",
@@ -1189,6 +1197,160 @@ export function registerDlcTools(server) {
             return {
                 isError: true,
                 content: [{ type: "text", text: `Failed to get sensor spec: ${err.message}` }],
+            };
+        }
+    });
+    // 28. dlc_session_cost: Session Cost & Runtime Metrics
+    server.tool("dlc_session_cost", "Read-only session cost and execution metrics view. Prints deterministic aggregates for the current workflow: duration, stage outcomes, memory entries, sensor firings, and learnings.", {
+        intentId: z.string().optional().describe("Optional intent ID (defaults to active intent)"),
+    }, async ({ intentId }) => {
+        try {
+            const report = await computeSessionCost(intentId);
+            const lines = [
+                "# AI-DLC Session Cost",
+                `* **Workflow**: \`${report.workflow_id}\``,
+                `* **Scope**: \`${report.scope}\``,
+                `* **Duration**: ${report.duration_minutes !== null ? `${report.duration_minutes} min` : "in progress"}`,
+                "",
+                "## Stages",
+                `* **Total**: ${report.stages.total}`,
+                `* **Approved**: ${report.stages.approved}`,
+                `* **Failed**: ${report.stages.failed}`,
+                `* **Pending**: ${report.stages.pending}`,
+                "",
+                "## By Phase",
+            ];
+            for (const [phase, tally] of Object.entries(report.by_phase)) {
+                lines.push(`* **${phase.toUpperCase()}**: ${tally.approved}/${tally.total} approved (${tally.pending} pending)`);
+            }
+            lines.push("", "## Memory Entries", `* **Total**: ${report.memory.total}`, `* **Interpretations**: ${report.memory.interpretations}`, `* **Deviations**: ${report.memory.deviations}`, `* **Trade-offs / Decisions**: ${report.memory.tradeoffs}`, `* **Open Questions**: ${report.memory.open_questions}`, "", "## Sensors", `* **Fired**: ${report.sensors.total}`, `* **Passed**: ${report.sensors.passed}`, `* **Failed**: ${report.sensors.failed}`, `* **Budget Overrides**: ${report.sensors.budget_override}`, `* **Incomplete**: ${report.sensors.incomplete}`, "", "## Learnings Captured", `* **From Orchestrator**: ${report.learnings.from_orchestrator}`, `* **From User Additions**: ${report.learnings.from_user_addition}`, "", "```json", JSON.stringify(report, null, 2), "```");
+            return {
+                content: [{ type: "text", text: lines.join("\n") }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Session cost calculation failed: ${err.message}` }],
+            };
+        }
+    });
+    // 29. dlc_session_replay: Narrative Session Replay
+    server.tool("dlc_session_replay", "Print a structured session narrative replay for stakeholders who weren't in the room. Sourced from audit logs and delivered artifacts without mutating state.", {
+        intentId: z.string().optional().describe("Optional intent ID (defaults to active intent)"),
+    }, async ({ intentId }) => {
+        try {
+            const markdown = await generateSessionReplay(intentId);
+            return {
+                content: [{ type: "text", text: markdown }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Session replay failed: ${err.message}` }],
+            };
+        }
+    });
+    // 30. dlc_outcomes_pack: Handover Pack Generator
+    server.tool("dlc_outcomes_pack", "Generate a comprehensive OUTCOMES.md handover document at workflow close so the team can own, operate, and continue the system without re-running the workflow.", {
+        intentId: z.string().optional().describe("Optional intent ID (defaults to active intent)"),
+        writeToFile: z.boolean().optional().default(false).describe("If true, writes OUTCOMES.md to the workspace root"),
+    }, async ({ intentId, writeToFile }) => {
+        try {
+            const { content, filePath } = await generateOutcomesPack({
+                intentId,
+                writeToFile,
+            });
+            const lines = [content];
+            if (filePath) {
+                lines.unshift(`> ✅ **OUTCOMES.md written to workspace root**: \`${filePath}\`\n`);
+            }
+            return {
+                content: [{ type: "text", text: lines.join("\n") }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Outcomes pack generation failed: ${err.message}` }],
+            };
+        }
+    });
+    // 31. dlc_get_skill_spec: Skill Specification & Contracts
+    server.tool("dlc_get_skill_spec", "Retrieve the official SKILL.md specification, classification, and argument hints for an AI-DLC skill.", {
+        skillName: z.enum(SKILL_ENUM).describe("Skill identifier"),
+    }, async ({ skillName }) => {
+        try {
+            const spec = getSkillSpec(skillName);
+            if (!spec) {
+                return {
+                    isError: true,
+                    content: [{ type: "text", text: `Skill '${skillName}' not found.` }],
+                };
+            }
+            const lines = [
+                `# AI-DLC Skill: \`${spec.name}\``,
+                `* **Classification**: \`${spec.classification}\``,
+                `* **User Invocable**: \`${spec.userInvocable}\``,
+                spec.argumentHint ? `* **Argument Hint**: \`${spec.argumentHint}\`` : "",
+                `* **Description**: ${spec.description}`,
+                "",
+                "---",
+                "",
+                spec.markdown,
+            ].filter(Boolean);
+            return {
+                content: [{ type: "text", text: lines.join("\n") }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Failed to get skill spec: ${err.message}` }],
+            };
+        }
+    });
+    // 32. dlc_install_skills: Export Skills to Agent Tools Directory
+    server.tool("dlc_install_skills", "Export AI-DLC skills into agent tool directories (e.g. .cursor/skills, .claude/skills, or .agents/skills) for native assistant invocation.", {
+        targetDirectory: z.string().optional().describe("Target skills directory (relative to workspace or absolute; defaults to .cursor/skills)"),
+        skills: z.array(z.enum(SKILL_ENUM)).optional().describe("Optional list of specific skills to export (defaults to all)"),
+    }, async ({ targetDirectory, skills }) => {
+        try {
+            const ws = getWorkspaceDir();
+            const baseDir = targetDirectory
+                ? path.isAbsolute(targetDirectory)
+                    ? targetDirectory
+                    : path.join(ws, targetDirectory)
+                : path.join(ws, ".cursor", "skills");
+            const targetSkills = skills && skills.length > 0 ? skills : (Object.keys(SKILL_ENUM), SKILL_ENUM);
+            const written = [];
+            for (const skillName of targetSkills) {
+                const spec = getSkillSpec(skillName);
+                if (!spec)
+                    continue;
+                const skillDir = path.join(baseDir, skillName);
+                await fs.mkdir(skillDir, { recursive: true });
+                const skillFilePath = path.join(skillDir, "SKILL.md");
+                await fs.writeFile(skillFilePath, spec.markdown, "utf-8");
+                written.push(skillFilePath);
+            }
+            const lines = [
+                "# ✅ AI-DLC Skills Installed",
+                `* **Target Directory**: \`${baseDir}\``,
+                `* **Installed Skills (${written.length})**:`,
+            ];
+            for (const f of written) {
+                lines.push(`  - \`${f}\``);
+            }
+            return {
+                content: [{ type: "text", text: lines.join("\n") }],
+            };
+        }
+        catch (err) {
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Failed to install skills: ${err.message}` }],
             };
         }
     });
