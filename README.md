@@ -560,13 +560,56 @@ Enforces strict regulatory compliance sign-offs before implementation.
 
 ### 4. Configuration & Transparent Execution
 
-* **Organization-wide**: Point to your central git repo checkout or shared directory:
+#### Option A: Central Organization Repo (Tier 2 via `AIDLC_FLOWS_DIR`)
+
+* **Claude Desktop** (`claude_desktop_config.json`):
+  ```json
+  {
+    "mcpServers": {
+      "aidlc": {
+        "command": "npx",
+        "args": ["-y", "github:doitintl/aidlc-mcp"],
+        "env": {
+          "AIDLC_FLOWS_DIR": "/path/to/my-company-flows"
+        }
+      }
+    }
+  }
+  ```
+
+* **Cursor** (`.cursor/mcp.json`):
+  ```json
+  {
+    "mcpServers": {
+      "aidlc": {
+        "command": "npx",
+        "args": ["-y", "github:doitintl/aidlc-mcp"],
+        "env": {
+          "AIDLC_FLOWS_DIR": "${env:HOME}/Projects/my-company-flows"
+        }
+      }
+    }
+  }
+  ```
+
+* **Claude Code CLI**:
+  ```bash
+  claude mcp add aidlc --env AIDLC_FLOWS_DIR=/path/to/my-company-flows -- npx -y github:doitintl/aidlc-mcp
+  ```
+
+* **Shell / CI Pipeline**:
   ```bash
   export AIDLC_FLOWS_DIR="/path/to/my-company-flows"
   ```
-* **Project-local**: Drop an `.aidlc/` or `aidlc/custom/` folder directly into your repository.
-* **Transparent Agent Invocation**: AI assistants invoke `dlc_init_intent({ scope: "regulated-migration" })` or trigger it automatically based on keywords in user prompts.
+
+#### Option B: Project-Local Workspace Overlay (Tier 3 via `.aidlc/`)
+
+* Simply commit an `.aidlc/` or `aidlc/custom/` folder directly to the project root. Zero environment variables required—auto-discovered by the server!
+
+#### Inspection & Transparent Invocation
+
 * **Inspect Extensions**: Run `npx github:doitintl/aidlc-mcp extensions --json` or call MCP tool `dlc_list_extensions` / resource `aidlc://extensions/catalog`.
+* **Transparent Agent Invocation**: AI assistants invoke `dlc_init_intent({ scope: "regulated-migration" })` or trigger it automatically based on keywords in user prompts.
 
 ---
 
