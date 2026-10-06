@@ -972,7 +972,7 @@ matches: "*.md"
     assert.equal(detected, "regulated-migration");
 
     // Dynamic stage creation
-    const regStages = createStagesForScope("regulated-migration", tempWs);
+    const regStages = createStagesForScope("regulated-migration", "greenfield", tempWs);
     assert.equal(regStages.length, 3);
     assert.equal(regStages[0].id, "intent-capture");
     assert.equal(regStages[1].id, "compliance-audit");
