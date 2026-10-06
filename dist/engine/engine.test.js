@@ -19,6 +19,7 @@ import { evaluateRequiredSections, evaluateClaimSources, evaluateTraceabilityJso
 import { getAllSkillSpecs, getSkillSpec } from "../skills/registry.js";
 import { computeSessionCost, generateSessionReplay, generateOutcomesPack, } from "./skills.js";
 import { dispatchCli, parseCliArgs } from "../cli/dispatcher.js";
+import { loadAllExtensions, clearExtensionCache, getCustomStageDefinition, } from "./extensions.js";
 test("Socratic Rubric Evaluation", () => {
     // 1. Incomplete draft
     const poorContent = "We want an inventory API with GET and POST.";
@@ -672,6 +673,154 @@ test("CLI Dispatcher and Argument Parser", async () => {
         assert.equal(runRes, true);
     }
     finally {
+        await fs.rm(tempWs, { recursive: true, force: true });
+    }
+});
+test("3-Tier Custom Flows and Extensions Loader", async () => {
+    const originalFlowsDir = process.env.AIDLC_FLOWS_DIR;
+    const orgFlowsDir = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-org-flows-"));
+    const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-ext-ws-"));
+    try {
+        // 1. Scaffold Tier 2: Organization Flow Repository
+        await fs.writeFile(path.join(orgFlowsDir, "aidlc-pack.json"), JSON.stringify({
+            name: "@acme/regulated-flows",
+            version: "1.0.0",
+            description: "Acme Regulated Banking Flows",
+        }, null, 2));
+        // Tier 2 Scope: regulated-migration
+        const orgScopesDir = path.join(orgFlowsDir, "scopes");
+        await fs.mkdir(orgScopesDir, { recursive: true });
+        await fs.writeFile(path.join(orgScopesDir, "regulated-migration.md"), `---
+name: regulated-migration
+description: Cloud migration workflow for regulated banking applications
+depth: rigorous
+test-strategy: exhaustive
+keywords: [compliance, banking, regulated, audit]
+stages:
+  - intent-capture
+  - compliance-audit
+  - build-and-test
+---
+# Regulated Migration Scope
+Specialized scope for PCI-DSS and SOC2 regulated workflows.
+`);
+        // Tier 2 Stage: compliance-audit (directory layout with rubric.json)
+        const orgComplianceStageDir = path.join(orgFlowsDir, "stages", "compliance-audit");
+        await fs.mkdir(orgComplianceStageDir, { recursive: true });
+        await fs.writeFile(path.join(orgComplianceStageDir, "STAGE.md"), `---
+name: Compliance & Regulatory Audit
+number: "01b"
+phase: inception
+persona: aidlc-compliance-auditor
+default-artifact-name: compliance-audit.md
+---
+# Compliance Stage
+Validates regulatory constraints before code changes.
+`);
+        await fs.writeFile(path.join(orgComplianceStageDir, "rubric.json"), JSON.stringify({
+            stageId: "compliance-audit",
+            stageName: "Compliance & Regulatory Audit",
+            persona: "aidlc-compliance-auditor",
+            dimensions: [
+                {
+                    id: "regulatory_standards",
+                    title: "Regulatory Standards Verification",
+                    description: "Ensures PCI-DSS and GDPR controls are documented",
+                    probingQuestions: [
+                        "Are PCI-DSS scope boundaries specified?",
+                        "Is data retention policy defined?",
+                    ],
+                    heuristicKeywords: ["pci-dss", "gdpr", "retention", "compliance"],
+                },
+            ],
+        }, null, 2));
+        // Tier 2 Knowledge
+        const orgKnowledgeDir = path.join(orgFlowsDir, "knowledge");
+        await fs.mkdir(orgKnowledgeDir, { recursive: true });
+        await fs.writeFile(path.join(orgKnowledgeDir, "pci-dss-matrix.md"), `# PCI-DSS Compliance Matrix\nAll database fields containing PAN must be encrypted using AES-GCM-256.`);
+        // Tier 2 Sensor
+        const orgSensorsDir = path.join(orgFlowsDir, "sensors");
+        await fs.mkdir(orgSensorsDir, { recursive: true });
+        await fs.writeFile(path.join(orgSensorsDir, "compliance-checker.md"), `---
+category: compliance
+severity: error
+fire-on: pre-gate
+description: Checks for compliance audit sign-off
+matches: "*.md"
+---
+# Compliance Checker Sensor
+`);
+        // 2. Scaffold Tier 3: Workspace Local Overlay (.aidlc/)
+        const wsAidlcScopes = path.join(tempWs, ".aidlc", "scopes");
+        await fs.mkdir(wsAidlcScopes, { recursive: true });
+        await fs.writeFile(path.join(wsAidlcScopes, "hotfix-fastpath.json"), JSON.stringify({
+            name: "hotfix-fastpath",
+            description: "Emergency hotfix workflow with fast-track testing",
+            depth: "minimal",
+            testStrategy: "smoke",
+            stageIds: ["intent-capture", "code-generation"],
+        }, null, 2));
+        // 3. Test Extensions Cache & Loader
+        process.env.AIDLC_FLOWS_DIR = orgFlowsDir;
+        clearExtensionCache();
+        const cache = loadAllExtensions(tempWs);
+        assert.equal(cache.packs.length, 2, "Should load Tier 2 org pack and Tier 3 workspace pack");
+        assert.ok(cache.scopes["regulated-migration"], "Should register regulated-migration scope from Tier 2");
+        assert.ok(cache.scopes["hotfix-fastpath"], "Should register hotfix-fastpath scope from Tier 3");
+        assert.ok(cache.stages["compliance-audit"], "Should register compliance-audit stage from Tier 2");
+        assert.ok(cache.sensors["compliance-checker"], "Should register compliance-checker sensor from Tier 2");
+        assert.ok(cache.knowledge.some((k) => k.id === "ext-pci-dss-matrix"), "Should register pci-dss-matrix knowledge doc");
+        // 4. Test Profiles & Scope Registry Integration
+        const allScopes = getAllScopeSpecs(tempWs);
+        assert.ok(allScopes.length >= 13, "Should return 11 built-in scopes + 2 custom extensions");
+        const regSpec = getScopeSpec("regulated-migration", tempWs);
+        assert.ok(regSpec);
+        assert.equal(regSpec.depth, "rigorous");
+        assert.equal(regSpec.testStrategy, "exhaustive");
+        // Dynamic prompt detection for custom scope
+        const detected = detectScopeFromPrompt("Perform banking migration with PCI-DSS compliance", tempWs);
+        assert.equal(detected, "regulated-migration");
+        // Dynamic stage creation
+        const regStages = createStagesForScope("regulated-migration", tempWs);
+        assert.equal(regStages.length, 3);
+        assert.equal(regStages[0].id, "intent-capture");
+        assert.equal(regStages[1].id, "compliance-audit");
+        assert.equal(regStages[1].phase, "inception");
+        const stageDef = getCustomStageDefinition("compliance-audit", tempWs);
+        assert.equal(stageDef?.defaultArtifactName, "compliance-audit.md");
+        // 5. Test Custom Socratic Rubric Evaluation
+        const poorAudit = "We did the audit and everything looks fine.";
+        const evalPoor = evaluateRubric("compliance-audit", poorAudit, tempWs);
+        assert.equal(evalPoor.satisfied, false, "Draft missing compliance keywords must fail rubric");
+        assert.ok(evalPoor.unresolvedProbes.length > 0);
+        const goodAudit = `
+## PCI-DSS Scope Boundaries
+All cardholder data environments are segmented behind Palo Alto firewalls.
+Data retention policies comply with GDPR Article 17 requirements.
+Full compliance checklist verified.
+    `;
+        const evalGood = evaluateRubric("compliance-audit", goodAudit, tempWs);
+        assert.equal(evalGood.satisfied, true, "Draft satisfying rubric dimensions must pass");
+        // 6. Test State Machine Lifecycle with Custom Scope
+        const initRes = await DlcStateMachine.initIntent({
+            label: "banking-migration",
+            description: "Migrate Payment Gateway to Cloud with PCI Compliance",
+            profile: "regulated-migration",
+            workspaceDir: tempWs,
+        });
+        assert.ok(initRes.intent);
+        assert.equal(initRes.intent.stages[0].id, "intent-capture");
+        const status = await DlcStateMachine.getStatus(undefined, tempWs);
+        assert.equal(status.intent?.profile, "regulated-migration");
+        assert.ok(status.intent?.stages.some((s) => s.id === "compliance-audit"));
+        // 7. Test CLI Dispatch for Extensions
+        const extCliRes = await dispatchCli(["extensions", "--workspace", tempWs, "--json"]);
+        assert.equal(extCliRes, true);
+    }
+    finally {
+        process.env.AIDLC_FLOWS_DIR = originalFlowsDir;
+        clearExtensionCache();
+        await fs.rm(orgFlowsDir, { recursive: true, force: true });
         await fs.rm(tempWs, { recursive: true, force: true });
     }
 });

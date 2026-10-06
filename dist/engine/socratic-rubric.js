@@ -1,3 +1,4 @@
+import { getCustomStageDefinition } from "./extensions.js";
 export const STAGE_DEFINITIONS = {
     // ==========================================
     // PHASE 0: INITIALIZATION
@@ -872,8 +873,8 @@ export const STAGE_DEFINITIONS = {
 /**
  * Evaluates artifact content against a stage's Socratic rubric.
  */
-export function evaluateRubric(stageId, content) {
-    const stageDef = STAGE_DEFINITIONS[stageId];
+export function evaluateRubric(stageId, content, workspaceDir) {
+    const stageDef = STAGE_DEFINITIONS[stageId] || getCustomStageDefinition(stageId, workspaceDir);
     if (!stageDef) {
         return {
             stageId,

@@ -23,6 +23,7 @@ import {
   generateSessionReplay,
   generateOutcomesPack,
 } from "../engine/skills.js";
+import { loadAllExtensions } from "../engine/extensions.js";
 
 export function registerDlcResources(server: McpServer): void {
   // 1. aidlc://state -> aidlc-state.md
@@ -591,6 +592,29 @@ export function registerDlcResources(server: McpServer): void {
           ],
         };
       }
+    }
+  );
+
+  // 26. aidlc://extensions/catalog -> JSON Catalog of loaded custom extension packs
+  server.registerResource(
+    "aidlc-extensions-catalog",
+    "aidlc://extensions/catalog",
+    {
+      title: "AI-DLC Extensions & Custom Flows Catalog",
+      description: "Structured JSON metadata of all active custom flow packs, custom scopes, stages, and sensors.",
+      mimeType: "application/json",
+    },
+    async (uri) => {
+      const cache = loadAllExtensions();
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: JSON.stringify(cache, null, 2),
+          },
+        ],
+      };
     }
   );
 }

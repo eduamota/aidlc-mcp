@@ -33,6 +33,7 @@ import { executeHook } from "../hooks/runner.js";
 import { installHooks } from "../hooks/installer.js";
 import { readAuditTrail } from "../engine/audit.js";
 import { HookEvent, ScopeType, DepthLevel, TestStrategy } from "../types.js";
+import { loadAllExtensions } from "../engine/extensions.js";
 
 export function findWorkspaceRoot(startDir = process.cwd()): string {
   if (process.env.AIDLC_WORKSPACE) return process.env.AIDLC_WORKSPACE;
@@ -480,6 +481,28 @@ export async function dispatchCli(rawArgs: string[]): Promise<boolean> {
         console.log(`Installed hooks: ${res.installed.join(", ") || "None"}`);
         if (res.skipped.length > 0) {
           console.log(`Skipped: ${res.skipped.join(", ")}`);
+        }
+      }
+      return true;
+    }
+
+    case "extensions":
+    case "flows": {
+      const cache = loadAllExtensions(ws);
+      if (parsed.flags.json) {
+        console.log(JSON.stringify(cache, null, 2));
+      } else {
+        console.log(`🧩 Active Extension Packs: ${cache.packs.length}`);
+        for (const p of cache.packs) {
+          console.log(`  📦 ${p.manifest?.name || path.basename(p.sourcePath)} (${p.tier})`);
+          console.log(`     Path: ${p.sourcePath}`);
+          console.log(`     Scopes: ${Object.keys(p.scopes).join(", ") || "None"}`);
+          console.log(`     Stages: ${Object.keys(p.stages).join(", ") || "None"}`);
+          console.log(`     Knowledge Docs: ${p.knowledge.length}`);
+        }
+        if (cache.packs.length === 0) {
+          console.log("No custom extension packs loaded. Standard built-in lifecycle is active.");
+          console.log("To load custom flows, set AIDLC_FLOWS_DIR=/path/to/repo or create ./.aidlc/ in the workspace.");
         }
       }
       return true;

@@ -29,6 +29,7 @@ import {
   generateOutcomesPack,
 } from "../engine/skills.js";
 import { getSkillSpec, getAllSkillSpecs } from "../skills/registry.js";
+import { loadAllExtensions } from "../engine/extensions.js";
 
 const SKILL_ENUM = [
   "aidlc-outcomes-pack",
@@ -110,10 +111,10 @@ export function registerDlcTools(server: McpServer): void {
       label: z.string().describe("Hyphenated label for the intent (e.g. 'inventory-api', 'auth-migration')"),
       description: z.string().describe("Comprehensive description of what is being built or resolved"),
       scope: z
-        .enum(SCOPE_ENUM)
+        .string()
         .optional()
         .default("auto")
-        .describe("Workflow scope profile: 'auto' (detects based on description/keywords), enterprise (33 stages), feature (33), mvp (23), poc (8), bugfix (9), refactor (10), infra (13), security-patch (10), classic (18), workshop (26), express (10)"),
+        .describe("Workflow scope profile: 'auto' (detects based on description/keywords), any built-in scope (enterprise, feature, mvp, poc, bugfix, refactor, infra, security-patch, classic, workshop, express), or any custom extension scope"),
       depth: z
         .enum(["comprehensive", "standard", "minimal"])
         .optional()
@@ -1632,6 +1633,58 @@ export function registerDlcTools(server: McpServer): void {
         return {
           isError: true,
           content: [{ type: "text", text: `Failed to install skills: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 33. dlc_list_extensions: Active Extensions & Custom Flows Inspector
+  server.tool(
+    "dlc_list_extensions",
+    "List all active custom flows, scopes, stages, sensors, and knowledge packs loaded across the 3-tier hierarchy (Tier 1: Built-in, Tier 2: Org Repo, Tier 3: Workspace Local).",
+    {},
+    async () => {
+      try {
+        const cache = loadAllExtensions();
+        const lines = [
+          "# 🧩 AI-DLC Custom Flows & Extensions Registry",
+          `* **Tier 1 (Built-in Core)**: 11 scopes, 33 stages, 59 playbooks, 6 sensors, 4 skills`,
+          `* **Custom Packs Loaded**: ${cache.packs.length}`,
+          "",
+        ];
+
+        if (cache.packs.length === 0) {
+          lines.push("> *No external extension packs loaded. Core built-in lifecycle is active.*");
+          lines.push("> *To load organization flows, set `AIDLC_FLOWS_DIR=/path/to/repo` or create `./.aidlc/` in the workspace.*");
+        } else {
+          lines.push("## Active Extension Packs:");
+          for (const p of cache.packs) {
+            const name = p.manifest?.name || path.basename(p.sourcePath);
+            lines.push(`### 📦 \`${name}\` (${p.tier})`);
+            lines.push(`* **Source**: \`${p.sourcePath}\``);
+            if (p.manifest?.description) lines.push(`* **Description**: ${p.manifest.description}`);
+            lines.push(`* **Custom Scopes**: ${Object.keys(p.scopes).join(", ") || "None"}`);
+            lines.push(`* **Custom Stages**: ${Object.keys(p.stages).join(", ") || "None"}`);
+            lines.push(`* **Custom Sensors**: ${Object.keys(p.sensors).join(", ") || "None"}`);
+            lines.push(`* **Custom Knowledge Docs**: ${p.knowledge.length}`);
+          }
+        }
+
+        const customScopes = Object.keys(cache.scopes);
+        if (customScopes.length > 0) {
+          lines.push("", "## Available Custom Scopes:");
+          for (const s of Object.values(cache.scopes)) {
+            lines.push(`* **\`${s.type}\`** (${s.name}): ${s.description} [${s.stageIds.length} stages]`);
+          }
+        }
+
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to list extensions: ${err.message}` }],
         };
       }
     }

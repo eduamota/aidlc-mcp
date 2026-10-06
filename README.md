@@ -274,6 +274,7 @@ Copy and paste these prompts directly into your AI coding assistant (Claude Code
 | `dlc_outcomes_pack` | Generate comprehensive handover document (`OUTCOMES.md`) at workflow close. |
 | `dlc_get_skill_spec` | Retrieve official `SKILL.md` specification and argument hints for any AI-DLC skill. |
 | `dlc_install_skills` | Export AI-DLC skills into agent tool directories (`.cursor/skills`, `.claude/skills`, `.agents/skills`). |
+| `dlc_list_extensions` | List loaded custom scopes, stages, sensors, and knowledge packs across all 3 tiers. |
 
 ### Prompts
 | Prompt | Description |
@@ -320,6 +321,7 @@ Copy and paste these prompts directly into your AI coding assistant (Claude Code
 | `aidlc://protocols/reviewer-protocol` | Independent reviewer invocation protocol (§12a) and verdict schema. |
 | `aidlc://protocols/construction-protocol` | Units of Work (UoW) DAG execution, Plan Approval, build-and-test loopback. |
 | `aidlc://protocols/recovery-protocol` | Session resumption and stage reopening without data loss. |
+| `aidlc://extensions/catalog` | Dynamic catalog of all loaded Tier 2 and Tier 3 custom extensions, scopes, and stages. |
 
 ---
 
@@ -400,6 +402,92 @@ dlc_approve_gate ({ notes: "Approved by tech lead" })
            ▼
 Advances to Stage 2.3 (Requirements Analysis)
 ```
+
+---
+
+## 🧩 Custom Flows & Extensions (3-Tier Precedence Architecture)
+
+AI-DLC supports company-specific scopes, stages, rubrics, and engineering playbooks through a **3-tier hierarchical precedence model**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Tier 3: Workspace Overlay (.aidlc/ or aidlc/custom/)        │  Overrides Tier 2 & 1
+├─────────────────────────────────────────────────────────────┤
+│ Tier 2: Organization Repo (AIDLC_FLOWS_DIR environment var) │  Overrides Tier 1
+├─────────────────────────────────────────────────────────────┤
+│ Tier 1: Built-in Core (Bundled 11 scopes, 33 stages, etc.)  │  Base fallback
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 1. Extension Pack Directory Layout
+
+An organization flow repository (or local workspace overlay) uses a modular, file-based directory layout:
+
+```text
+my-company-flows/
+├── aidlc-pack.json                 # Optional pack metadata
+├── scopes/                         # Custom workflow scopes (.md or .json)
+│   └── regulated-migration.md      # Frontmatter + stage sequence
+├── stages/                         # Custom stages & Socratic rubrics
+│   └── compliance-audit/
+│       ├── STAGE.md                # Execution guide & persona
+│       └── rubric.json             # Socratic dimensions & probes
+├── knowledge/                      # Specialized company playbooks (.md)
+│   └── pci-dss-matrix.md
+└── sensors/                        # Custom deterministic sensors (.md)
+    └── compliance-checker.md
+```
+
+### 2. Custom Scope Definition Example (`scopes/regulated-migration.md`)
+
+```markdown
+---
+name: regulated-migration
+description: Cloud migration workflow for regulated banking applications
+depth: rigorous
+test-strategy: exhaustive
+keywords: [compliance, banking, regulated, audit]
+stages:
+  - intent-capture
+  - compliance-audit
+  - security-threat-modeling
+  - build-and-test
+---
+# Regulated Migration Scope
+Enforces strict regulatory compliance sign-offs before implementation.
+```
+
+### 3. Custom Stage Rubric Example (`stages/compliance-audit/rubric.json`)
+
+```json
+{
+  "stageId": "compliance-audit",
+  "stageName": "Compliance & Regulatory Audit",
+  "persona": "aidlc-compliance-auditor",
+  "dimensions": [
+    {
+      "id": "regulatory_standards",
+      "title": "Regulatory Standards Verification",
+      "description": "Ensures PCI-DSS and GDPR controls are documented",
+      "probingQuestions": [
+        "Are PCI-DSS scope boundaries specified?",
+        "Is data retention policy defined?"
+      ],
+      "heuristicKeywords": ["pci-dss", "gdpr", "retention", "compliance"]
+    }
+  ]
+}
+```
+
+### 4. Configuration & Transparent Execution
+
+* **Organization-wide**: Point to your central git repo checkout or shared directory:
+  ```bash
+  export AIDLC_FLOWS_DIR="/path/to/my-company-flows"
+  ```
+* **Project-local**: Drop an `.aidlc/` or `aidlc/custom/` folder directly into your repository.
+* **Transparent Agent Invocation**: AI assistants invoke `dlc_init_intent({ scope: "regulated-migration" })` or trigger it automatically based on keywords in user prompts.
+* **Inspect Extensions**: Run `npx github:doitintl/aidlc-mcp extensions --json` or call MCP tool `dlc_list_extensions` / resource `aidlc://extensions/catalog`.
 
 ---
 

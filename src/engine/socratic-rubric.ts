@@ -1,4 +1,5 @@
 import { SocraticRubric, RubricEvaluationResult, RubricDimensionResult, StageDefinition } from "../types.js";
+import { getCustomStageDefinition } from "./extensions.js";
 
 export const STAGE_DEFINITIONS: Record<string, StageDefinition> = {
   // ==========================================
@@ -879,8 +880,12 @@ export const STAGE_DEFINITIONS: Record<string, StageDefinition> = {
 /**
  * Evaluates artifact content against a stage's Socratic rubric.
  */
-export function evaluateRubric(stageId: string, content: string): RubricEvaluationResult {
-  const stageDef = STAGE_DEFINITIONS[stageId];
+export function evaluateRubric(
+  stageId: string,
+  content: string,
+  workspaceDir?: string
+): RubricEvaluationResult {
+  const stageDef = STAGE_DEFINITIONS[stageId] || getCustomStageDefinition(stageId, workspaceDir);
   if (!stageDef) {
     return {
       stageId,

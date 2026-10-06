@@ -1,8 +1,43 @@
 import { ScopeType, ProjectType, DepthLevel, TestStrategy, StageState } from "../types.js";
 import { STAGE_DEFINITIONS } from "./socratic-rubric.js";
-import { getScopeSpec, getAllScopeSpecs, detectScopeFromPrompt, ScopeSpec } from "../scopes/registry.js";
+import {
+  getScopeSpec as getBuiltInScopeSpec,
+  getAllScopeSpecs as getAllBuiltInScopeSpecs,
+  detectScopeFromPrompt as detectBuiltInScopeFromPrompt,
+  ScopeSpec,
+} from "../scopes/registry.js";
+import {
+  getCustomScopeDefinition,
+  getAllCustomScopes,
+  getCustomScopeSpec,
+  getAllCustomScopeSpecs,
+  getCustomStageDefinition,
+} from "./extensions.js";
 
-export { getScopeSpec, getAllScopeSpecs, detectScopeFromPrompt, ScopeSpec };
+export { ScopeSpec };
+
+export function getScopeSpec(name: string, workspaceDir?: string): ScopeSpec | undefined {
+  return getBuiltInScopeSpec(name) || getCustomScopeSpec(name, workspaceDir);
+}
+
+export function getAllScopeSpecs(workspaceDir?: string): ScopeSpec[] {
+  return [...getAllBuiltInScopeSpecs(), ...getAllCustomScopeSpecs(workspaceDir)];
+}
+
+export function detectScopeFromPrompt(prompt: string, workspaceDir?: string): ScopeType | string | undefined {
+  const builtIn = detectBuiltInScopeFromPrompt(prompt);
+  if (builtIn) return builtIn;
+
+  const lower = prompt.toLowerCase();
+  const customSpecs = getAllCustomScopeSpecs(workspaceDir);
+  for (const s of customSpecs) {
+    if (lower.includes(s.name.toLowerCase())) return s.name;
+    for (const kw of s.keywords || []) {
+      if (lower.includes(kw.toLowerCase())) return s.name;
+    }
+  }
+  return undefined;
+}
 
 export interface ScopeDefinition {
   type: ScopeType;
@@ -299,10 +334,12 @@ export const PROFILES = SCOPES;
  * Greenfield projects skip reverse-engineering automatically.
  */
 export function createStagesForScope(
-  scopeType: ScopeType,
-  projectType: ProjectType = "greenfield"
+  scopeType: ScopeType | string,
+  projectType: ProjectType = "greenfield",
+  workspaceDir?: string
 ): StageState[] {
-  const scopeDef = SCOPES[scopeType] || SCOPES.feature;
+  const scopeDef =
+    SCOPES[scopeType as ScopeType] || getCustomScopeDefinition(scopeType, workspaceDir) || SCOPES.feature;
   let stageIds = [...scopeDef.stageIds];
 
   // If greenfield, remove reverse-engineering since there is no existing code to scan
@@ -318,7 +355,7 @@ export function createStagesForScope(
   }
 
   return stageIds.map((stageId, index) => {
-    const def = STAGE_DEFINITIONS[stageId];
+    const def = STAGE_DEFINITIONS[stageId] || getCustomStageDefinition(stageId, workspaceDir);
     if (!def) {
       throw new Error(`Unknown stage ID: ${stageId}`);
     }

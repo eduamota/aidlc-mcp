@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { SCOPES, createStagesForScope } from "./profiles.js";
 import { STAGE_DEFINITIONS, evaluateRubric } from "./socratic-rubric.js";
+import { getCustomScopeDefinition, getCustomStageDefinition } from "./extensions.js";
 import { generateIntentId, scaffoldIntent, loadActiveIntentState, loadIntentState, persistIntentState, saveStageArtifact, setActiveIntent, getIntentDirPath, } from "../utils/filesystem.js";
 import { getWorkspaceDir } from "../config.js";
 import { appendAuditLog } from "./audit.js";
@@ -13,7 +14,7 @@ export class DlcStateMachine {
         const ws = params.workspaceDir || getWorkspaceDir();
         const profile = params.profile || "feature";
         const projectType = params.projectType || "greenfield";
-        const scopeDef = SCOPES[profile];
+        const scopeDef = SCOPES[profile] || getCustomScopeDefinition(profile, ws);
         if (!scopeDef) {
             throw new Error(`Invalid scope/profile: '${profile}'. Supported scopes: ${Object.keys(SCOPES).join(", ")}`);
         }
@@ -21,7 +22,7 @@ export class DlcStateMachine {
         const testStrategy = params.testStrategy || scopeDef.defaultTestStrategy;
         const intentId = generateIntentId(params.label);
         const now = new Date().toISOString();
-        const stages = createStagesForScope(profile, projectType);
+        const stages = createStagesForScope(profile, projectType, ws);
         const intent = {
             intentId,
             label: params.label,
@@ -77,7 +78,9 @@ export class DlcStateMachine {
             };
         }
         const currentStageState = intent.stages[intent.currentStageIndex];
-        const currentStageDef = currentStageState ? STAGE_DEFINITIONS[currentStageState.id] || null : null;
+        const currentStageDef = currentStageState
+            ? STAGE_DEFINITIONS[currentStageState.id] || getCustomStageDefinition(currentStageState.id, ws) || null
+            : null;
         const isComplete = intent.currentStageIndex >= intent.stages.length;
         return {
             intent,
@@ -101,7 +104,7 @@ export class DlcStateMachine {
         if (!targetStageId) {
             throw new Error("No active stage to submit draft for.");
         }
-        const stageDef = STAGE_DEFINITIONS[targetStageId];
+        const stageDef = STAGE_DEFINITIONS[targetStageId] || getCustomStageDefinition(targetStageId, ws);
         if (!stageDef) {
             throw new Error(`Unknown stage '${targetStageId}'`);
         }
@@ -139,7 +142,7 @@ export class DlcStateMachine {
         const artifactName = params.artifactName || stageDef.defaultArtifactName;
         const relArtifactPath = await saveStageArtifact(intent.intentId, stageDef.phase, artifactName, params.content, ws);
         // Evaluate against Socratic Rubric
-        const evaluation = evaluateRubric(targetStageId, params.content);
+        const evaluation = evaluateRubric(targetStageId, params.content, ws);
         // Update StageState in intent
         if (stageIndex !== -1) {
             const stage = intent.stages[stageIndex];
