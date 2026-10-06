@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getKnowledgeDir, getWorkspaceDir, CONFIG } from "../config.js";
+import { getAllCoreKnowledgeDocs, getCoreKnowledgeDoc } from "../knowledge/registry.js";
 /**
  * Ensures knowledge directories exist for a space.
  */
@@ -45,7 +46,7 @@ export async function addKnowledgeDocument(params) {
  */
 export async function listKnowledgeDocuments(workspaceDir = getWorkspaceDir(), space = CONFIG.DEFAULT_SPACE) {
     const kDir = getKnowledgeDir(workspaceDir, space);
-    const docs = [];
+    const workspaceDocs = [];
     async function walk(dir, category, agentName) {
         try {
             const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -66,7 +67,7 @@ export async function listKnowledgeDocuments(workspaceDir = getWorkspaceDir(), s
                     try {
                         const stat = await fs.stat(fullPath);
                         const content = await fs.readFile(fullPath, "utf-8");
-                        docs.push({
+                        workspaceDocs.push({
                             id: entry.name.replace(/\.[^/.]+$/, ""),
                             filename: entry.name,
                             relativePath: path.relative(workspaceDir, fullPath),
@@ -84,22 +85,59 @@ export async function listKnowledgeDocuments(workspaceDir = getWorkspaceDir(), s
         catch { }
     }
     await walk(kDir, "documentkb");
-    return docs;
+    // Merge built-in core knowledge documents
+    const coreDocs = getAllCoreKnowledgeDocs().map((c) => ({
+        id: c.id,
+        filename: c.filename,
+        relativePath: `core/knowledge/${c.relativePath}`,
+        category: c.category,
+        agent: c.agent,
+        sizeBytes: c.sizeBytes,
+        updatedAt: new Date().toISOString(),
+        preview: c.preview,
+    }));
+    const workspaceIds = new Set(workspaceDocs.map((d) => d.id));
+    const filteredCore = coreDocs.filter((c) => !workspaceIds.has(c.id));
+    return [...workspaceDocs, ...filteredCore];
 }
 /**
- * Reads a knowledge document by relative path or filename.
+ * Reads a knowledge document by relative path, filename, or ID.
  */
 export async function readKnowledgeDocument(identifier, workspaceDir = getWorkspaceDir(), space = CONFIG.DEFAULT_SPACE) {
     const docs = await listKnowledgeDocuments(workspaceDir, space);
     const matched = docs.find((d) => d.id === identifier || d.filename === identifier || d.relativePath.endsWith(identifier));
-    if (!matched)
+    if (!matched) {
+        const core = getCoreKnowledgeDoc(identifier);
+        if (core) {
+            return {
+                filename: core.filename,
+                relativePath: `core/knowledge/${core.relativePath}`,
+                content: core.content,
+            };
+        }
         return null;
-    const fullPath = path.join(workspaceDir, matched.relativePath);
-    const content = await fs.readFile(fullPath, "utf-8");
-    return {
-        filename: matched.filename,
-        relativePath: matched.relativePath,
-        content,
-    };
+    }
+    if (matched.relativePath.startsWith("core/knowledge/")) {
+        const core = getCoreKnowledgeDoc(matched.id) || getCoreKnowledgeDoc(matched.filename);
+        if (core) {
+            return {
+                filename: core.filename,
+                relativePath: matched.relativePath,
+                content: core.content,
+            };
+        }
+    }
+    try {
+        const fullPath = path.join(workspaceDir, matched.relativePath);
+        const content = await fs.readFile(fullPath, "utf-8");
+        return {
+            filename: matched.filename,
+            relativePath: matched.relativePath,
+            content,
+        };
+    }
+    catch {
+        return null;
+    }
 }
 //# sourceMappingURL=knowledge.js.map

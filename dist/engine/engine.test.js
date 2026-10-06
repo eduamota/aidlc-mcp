@@ -135,14 +135,23 @@ test("Two-Tier Knowledge Base Management", async () => {
         });
         assert.equal(doc.filename, "company-architecture-standards.md");
         assert.equal(doc.category, "shared");
-        // 2. List documents
+        // 2. List documents (workspace + 59 core documents)
         const list = await listKnowledgeDocuments(tempWs);
-        assert.equal(list.length, 1);
-        assert.equal(list[0].id, "company-architecture-standards");
-        // 3. Read document
+        assert.ok(list.length >= 59, "Should list all built-in core knowledge guides plus workspace document");
+        assert.ok(list.some((d) => d.id === "company-architecture-standards"), "Should include custom team standard");
+        assert.ok(list.some((d) => d.id === "ddd-patterns"), "Should include built-in ddd-patterns guide");
+        assert.ok(list.some((d) => d.id === "threat-modelling-stride"), "Should include built-in STRIDE threat modeling");
+        // 3. Read workspace document
         const read = await readKnowledgeDocument("company-architecture-standards", tempWs);
         assert.ok(read);
         assert.ok(read.content.includes("OpenTelemetry"));
+        // 4. Read built-in core knowledge document
+        const dddDoc = await readKnowledgeDocument("ddd-patterns", tempWs);
+        assert.ok(dddDoc);
+        assert.ok(dddDoc.content.includes("Bounded Contexts"));
+        const strideDoc = await readKnowledgeDocument("threat-modelling-stride", tempWs);
+        assert.ok(strideDoc);
+        assert.ok(strideDoc.content.includes("STRIDE"));
     }
     finally {
         await fs.rm(tempWs, { recursive: true, force: true });

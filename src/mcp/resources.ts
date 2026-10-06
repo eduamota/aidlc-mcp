@@ -13,6 +13,7 @@ import {
   RECOVERY_PROTOCOL,
 } from "../engine/protocols.js";
 import { getAllStageSpecs } from "../stages/registry.js";
+import { getAllCoreKnowledgeDocs } from "../knowledge/registry.js";
 import { readAuditTrail } from "../engine/audit.js";
 
 export function registerDlcResources(server: McpServer): void {
@@ -274,4 +275,20 @@ export function registerDlcResources(server: McpServer): void {
       };
     }
   );
+
+  // 13. Core Knowledge Base Playbooks & Standards
+  for (const doc of getAllCoreKnowledgeDocs()) {
+    server.registerResource(
+      `aidlc-knowledge-${doc.id}`,
+      `aidlc://knowledge/${doc.relativePath}`,
+      {
+        title: `${doc.title} (${doc.category === "shared" ? "Shared Standard" : doc.agent || "Agent Playbook"})`,
+        description: `${doc.title} - Official AI-DLC Knowledge Guide.`,
+        mimeType: "text/markdown",
+      },
+      async (uri) => ({
+        contents: [{ uri: uri.href, mimeType: "text/markdown", text: doc.content }],
+      })
+    );
+  }
 }

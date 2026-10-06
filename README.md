@@ -143,7 +143,8 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `aidlc://active-intent` | JSON metadata of active intent. |
 | `aidlc://rubrics` | Complete catalog of 33 stage rubrics and probing dimensions. |
 | `aidlc://scopes` | Scope routing matrix and stage sequences. |
-| `aidlc://knowledge` | Listing of team standards and reference documents. |
+| `aidlc://knowledge` | Catalog and index of all 59 core engineering guides + workspace documents. |
+| `aidlc://knowledge/{agent}/{doc}` | Direct markdown access to any core playbook (e.g. `aidlc-architect-agent/ddd-patterns.md`). |
 | `aidlc://audit` | Append-only audit trail of lifecycle events (`audit.jsonl`). |
 | `aidlc://stages/catalog` | Metadata catalog for all 33 official stages from `core/aidlc-common/stages/`. |
 | `aidlc://stages/{slug}` | Verbatim markdown execution guide & frontmatter for any stage (e.g. `domain-design`). |
@@ -151,6 +152,23 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `aidlc://protocols/reviewer-protocol` | Independent reviewer invocation protocol (§12a) and verdict schema. |
 | `aidlc://protocols/construction-protocol` | Units of Work (UoW) DAG execution, Plan Approval, build-and-test loopback. |
 | `aidlc://protocols/recovery-protocol` | Session resumption and stage reopening without data loss. |
+
+---
+
+## 📚 Built-in Core Knowledge Base (59 Playbooks)
+
+The server bundles the complete software engineering playbooks from `core/knowledge/`:
+* **Architect**: `ddd-patterns.md`, `architecture-guide.md`, `architecture-patterns.md`, `nfr-design-guide.md`, `adr-template.md`.
+* **Developer**: `api-design-guide.md`, `code-generation-guide.md`, `data-modelling-patterns.md`, `re-artifacts.md`.
+* **DevSecOps**: `threat-modelling-stride.md`, `security-guide.md`, `devsecops-pipeline-patterns.md`.
+* **Quality**: `testing-guide.md`, `test-strategy-patterns.md`, `nfr-reliability-guide.md`, `nfr-validation-methods.md`.
+* **AWS Platform**: `cdk-best-practices.md`, `well-architected-framework.md`, `cost-optimization-patterns.md`.
+* **Operations**: `observability-patterns.md`, `slo-sli-patterns.md`, `incident-response-guide.md`.
+* **Product**: `requirements-elicitation.md`, `user-story-patterns.md`, `prioritization-frameworks.md`.
+* **Delivery**: `workflow-planning-guide.md`, `team-topologies.md`, `mob-programming-guide.md`.
+* **Shared**: `ai-dlc-principles.md`, `brownfield.md`, `verification.md`, `audit-format.md`.
+
+All documents are retrievable via `dlc_knowledge_read({ identifier: "ddd-patterns" })` or resource `aidlc://knowledge/...`.
 
 ---
 

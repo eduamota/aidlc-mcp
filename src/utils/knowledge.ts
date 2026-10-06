@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { getKnowledgeDir, getWorkspaceDir, CONFIG } from "../config.js";
 import { KnowledgeDocument } from "../types.js";
+import { getAllCoreKnowledgeDocs, getCoreKnowledgeDoc } from "../knowledge/registry.js";
 
 /**
  * Ensures knowledge directories exist for a space.
@@ -62,7 +63,7 @@ export async function listKnowledgeDocuments(
   space: string = CONFIG.DEFAULT_SPACE
 ): Promise<KnowledgeDocument[]> {
   const kDir = getKnowledgeDir(workspaceDir, space);
-  const docs: KnowledgeDocument[] = [];
+  const workspaceDocs: KnowledgeDocument[] = [];
 
   async function walk(dir: string, category: "shared" | "agent" | "documentkb", agentName?: string) {
     try {
@@ -81,7 +82,7 @@ export async function listKnowledgeDocuments(
           try {
             const stat = await fs.stat(fullPath);
             const content = await fs.readFile(fullPath, "utf-8");
-            docs.push({
+            workspaceDocs.push({
               id: entry.name.replace(/\.[^/.]+$/, ""),
               filename: entry.name,
               relativePath: path.relative(workspaceDir, fullPath),
@@ -98,11 +99,27 @@ export async function listKnowledgeDocuments(
   }
 
   await walk(kDir, "documentkb");
-  return docs;
+
+  // Merge built-in core knowledge documents
+  const coreDocs: KnowledgeDocument[] = getAllCoreKnowledgeDocs().map((c) => ({
+    id: c.id,
+    filename: c.filename,
+    relativePath: `core/knowledge/${c.relativePath}`,
+    category: c.category,
+    agent: c.agent,
+    sizeBytes: c.sizeBytes,
+    updatedAt: new Date().toISOString(),
+    preview: c.preview,
+  }));
+
+  const workspaceIds = new Set(workspaceDocs.map((d) => d.id));
+  const filteredCore = coreDocs.filter((c) => !workspaceIds.has(c.id));
+
+  return [...workspaceDocs, ...filteredCore];
 }
 
 /**
- * Reads a knowledge document by relative path or filename.
+ * Reads a knowledge document by relative path, filename, or ID.
  */
 export async function readKnowledgeDocument(
   identifier: string,
@@ -110,14 +127,42 @@ export async function readKnowledgeDocument(
   space: string = CONFIG.DEFAULT_SPACE
 ): Promise<{ filename: string; relativePath: string; content: string } | null> {
   const docs = await listKnowledgeDocuments(workspaceDir, space);
-  const matched = docs.find((d) => d.id === identifier || d.filename === identifier || d.relativePath.endsWith(identifier));
-  if (!matched) return null;
+  const matched = docs.find(
+    (d) => d.id === identifier || d.filename === identifier || d.relativePath.endsWith(identifier)
+  );
 
-  const fullPath = path.join(workspaceDir, matched.relativePath);
-  const content = await fs.readFile(fullPath, "utf-8");
-  return {
-    filename: matched.filename,
-    relativePath: matched.relativePath,
-    content,
-  };
+  if (!matched) {
+    const core = getCoreKnowledgeDoc(identifier);
+    if (core) {
+      return {
+        filename: core.filename,
+        relativePath: `core/knowledge/${core.relativePath}`,
+        content: core.content,
+      };
+    }
+    return null;
+  }
+
+  if (matched.relativePath.startsWith("core/knowledge/")) {
+    const core = getCoreKnowledgeDoc(matched.id) || getCoreKnowledgeDoc(matched.filename);
+    if (core) {
+      return {
+        filename: core.filename,
+        relativePath: matched.relativePath,
+        content: core.content,
+      };
+    }
+  }
+
+  try {
+    const fullPath = path.join(workspaceDir, matched.relativePath);
+    const content = await fs.readFile(fullPath, "utf-8");
+    return {
+      filename: matched.filename,
+      relativePath: matched.relativePath,
+      content,
+    };
+  } catch {
+    return null;
+  }
 }

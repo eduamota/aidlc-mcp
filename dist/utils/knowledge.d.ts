@@ -19,7 +19,7 @@ export declare function addKnowledgeDocument(params: {
  */
 export declare function listKnowledgeDocuments(workspaceDir?: string, space?: string): Promise<KnowledgeDocument[]>;
 /**
- * Reads a knowledge document by relative path or filename.
+ * Reads a knowledge document by relative path, filename, or ID.
  */
 export declare function readKnowledgeDocument(identifier: string, workspaceDir?: string, space?: string): Promise<{
     filename: string;
