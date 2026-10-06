@@ -11,6 +11,9 @@ import { getStageSpec, getAllStageSpecs } from "../stages/registry.js";
 import { readAuditTrail } from "../engine/audit.js";
 import { executeHook } from "../hooks/runner.js";
 import { installHooks } from "../hooks/installer.js";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { getWorkspaceDir } from "../config.js";
 import {
   resolveActiveMemory,
   getMemoryRule,
@@ -18,6 +21,17 @@ import {
   recordLearning,
   readMemoryLayer,
 } from "../utils/memory.js";
+import { runStageSensors } from "../engine/sensors.js";
+import { getSensorSpec, getAllSensorSpecs } from "../sensors/registry.js";
+
+const SENSOR_ENUM = [
+  "claim-sources",
+  "required-sections",
+  "traceability",
+  "upstream-coverage",
+  "type-check",
+  "linter",
+] as const;
 
 const SCOPE_ENUM_STRICT = [
   "enterprise",
@@ -1277,6 +1291,120 @@ export function registerDlcTools(server: McpServer): void {
         return {
           isError: true,
           content: [{ type: "text", text: `Failed to get scope spec: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 26. dlc_run_sensors: Execute Deterministic Sensor Verification
+  server.tool(
+    "dlc_run_sensors",
+    "Run deterministic AI-DLC sensor validation (claim-sources, required-sections, traceability, upstream-coverage) against a stage deliverable.",
+    {
+      stageSlug: z.string().describe("Stage slug (e.g. 'intent-capture', 'units-generation', 'functional-design')"),
+      content: z.string().optional().describe("Markdown content string to validate directly"),
+      artifactPath: z.string().optional().describe("Workspace-relative or absolute path to artifact file"),
+      space: z.string().optional().describe("AI-DLC space name (defaults to default space)"),
+    },
+    async ({ stageSlug, content, artifactPath, space }) => {
+      try {
+        let textToValidate = content;
+        let filename = artifactPath ? path.basename(artifactPath) : `${stageSlug}.md`;
+
+        if (!textToValidate && artifactPath) {
+          const ws = getWorkspaceDir();
+          const fullPath = path.isAbsolute(artifactPath) ? artifactPath : path.join(ws, artifactPath);
+          textToValidate = await fs.readFile(fullPath, "utf-8");
+        }
+
+        if (!textToValidate) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: "Must provide either 'content' or valid 'artifactPath' to run sensors." }],
+          };
+        }
+
+        const report = await runStageSensors({
+          stageSlug,
+          content: textToValidate,
+          filename,
+          space,
+        });
+
+        const statusEmoji = report.overallPass ? "✅" : "⚠️";
+        const lines = [
+          `# ${statusEmoji} AI-DLC Sensors Report: \`${stageSlug}\``,
+          `* **Overall Status**: \`${report.overallPass ? "PASSED" : "FINDINGS DETECTED"}\``,
+          `* **Target Artifact**: \`${filename}\``,
+          "",
+          "## Sensor Checks:",
+        ];
+
+        for (const res of report.results) {
+          const icon = res.pass ? "✅" : "❌";
+          lines.push(`### ${icon} Sensor: \`${res.sensorId}\` (${res.severity})`);
+          if (res.findings.length === 0) {
+            lines.push("* Pass: No structural violations detected.");
+          } else {
+            for (const f of res.findings) {
+              lines.push(`* ⚠️ ${f}`);
+            }
+          }
+          if (res.details) {
+            lines.push(`\`\`\`json\n${JSON.stringify(res.details, null, 2)}\n\`\`\``);
+          }
+        }
+
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Sensor execution failed: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  // 27. dlc_get_sensor_spec: Sensor Specification & Contracts
+  server.tool(
+    "dlc_get_sensor_spec",
+    "Retrieve the official specification, trigger events, and contract schema for any of the 6 AI-DLC sensors.",
+    {
+      sensorId: z.enum(SENSOR_ENUM).describe("Sensor identifier"),
+    },
+    async ({ sensorId }) => {
+      try {
+        const spec = getSensorSpec(sensorId);
+        if (!spec) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: `Sensor '${sensorId}' not found.` }],
+          };
+        }
+
+        const lines = [
+          `# AI-DLC Sensor: \`${spec.id}\``,
+          `* **Category**: \`${spec.category}\``,
+          `* **Default Severity**: \`${spec.defaultSeverity}\``,
+          `* **Fire On**: \`${spec.fireOn}\``,
+          `* **Description**: ${spec.description}`,
+          `* **File Matches**: \`${spec.matches}\``,
+          `* **Timeout**: ${spec.timeoutSeconds}s`,
+          "",
+          "---",
+          "",
+          spec.markdown,
+        ];
+
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+        };
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to get sensor spec: ${err.message}` }],
         };
       }
     }

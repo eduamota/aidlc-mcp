@@ -10,6 +10,7 @@ import { getAllStageSpecs } from "../stages/registry.js";
 import { getAllCoreKnowledgeDocs } from "../knowledge/registry.js";
 import { readAuditTrail } from "../engine/audit.js";
 import { resolveActiveMemory, readMemoryLayer } from "../utils/memory.js";
+import { getAllSensorSpecs } from "../sensors/registry.js";
 export function registerDlcResources(server) {
     // 1. aidlc://state -> aidlc-state.md
     server.registerResource("aidlc-state", "aidlc://state", {
@@ -295,6 +296,36 @@ export function registerDlcResources(server) {
         server.registerResource(`aidlc-scope-${spec.name}`, `aidlc://scopes/${spec.name}`, {
             title: `Scope Specification: ${spec.name}`,
             description: `Official AI-DLC scope specification, policies, and rationale for ${spec.name}.`,
+            mimeType: "text/markdown",
+        }, async (uri) => ({
+            contents: [{ uri: uri.href, mimeType: "text/markdown", text: spec.markdown }],
+        }));
+    }
+    // 19. aidlc://sensors/catalog -> JSON Catalog of all 6 sensors
+    server.registerResource("aidlc-sensors-catalog", "aidlc://sensors/catalog", {
+        title: "AI-DLC Sensors Catalog",
+        description: "Structured JSON metadata of all 6 deterministic AI-DLC verification sensors.",
+        mimeType: "application/json",
+    }, async (uri) => {
+        const all = getAllSensorSpecs().map((s) => ({
+            id: s.id,
+            category: s.category,
+            defaultSeverity: s.defaultSeverity,
+            fireOn: s.fireOn,
+            description: s.description,
+            matches: s.matches,
+            timeoutSeconds: s.timeoutSeconds,
+            resourceUri: `aidlc://sensors/${s.id}`,
+        }));
+        return {
+            contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(all, null, 2) }],
+        };
+    });
+    // 20. Individual sensor resources aidlc://sensors/{id}
+    for (const spec of getAllSensorSpecs()) {
+        server.registerResource(`aidlc-sensor-${spec.id}`, `aidlc://sensors/${spec.id}`, {
+            title: `Sensor Specification: ${spec.id}`,
+            description: `Official specification and contract schema for AI-DLC ${spec.id} sensor.`,
             mimeType: "text/markdown",
         }, async (uri) => ({
             contents: [{ uri: uri.href, mimeType: "text/markdown", text: spec.markdown }],

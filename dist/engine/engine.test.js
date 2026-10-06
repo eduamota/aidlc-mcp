@@ -14,6 +14,8 @@ import { readAuditTrail } from "./audit.js";
 import { executeHook } from "../hooks/runner.js";
 import { installHooks } from "../hooks/installer.js";
 import { ensureMemoryDirs, resolveActiveMemory, getMemoryRule, updateMemoryRule, recordLearning, readMemoryLayer, } from "../utils/memory.js";
+import { getAllSensorSpecs, getSensorSpec } from "../sensors/registry.js";
+import { evaluateRequiredSections, evaluateClaimSources, evaluateTraceabilityJson, evaluateUpstreamCoverage, runStageSensors, } from "./sensors.js";
 test("Socratic Rubric Evaluation", () => {
     // 1. Incomplete draft
     const poorContent = "We want an inventory API with GET and POST.";
@@ -443,6 +445,119 @@ test("AI-DLC Memory Subsystem: 3-Tier Layering, Phase Guardrails, and Learnings"
         const learningsContent = await readMemoryLayer("learnings", tempWs);
         assert.ok(learningsContent.includes("Always use structured JSON error logs"));
         assert.ok(learningsContent.includes("construction/code-generation"));
+    }
+    finally {
+        await fs.rm(tempWs, { recursive: true, force: true });
+    }
+});
+test("AI-DLC Deterministic Sensors: required-sections, claim-sources, traceability, and DAG validation", async () => {
+    const tempWs = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-sensors-"));
+    try {
+        // 1. Verify 6 official sensors in registry
+        const allSensors = getAllSensorSpecs();
+        assert.equal(allSensors.length, 6, "All 6 core sensors must be registered");
+        assert.ok(getSensorSpec("claim-sources"));
+        assert.ok(getSensorSpec("required-sections"));
+        assert.ok(getSensorSpec("traceability"));
+        assert.ok(getSensorSpec("upstream-coverage"));
+        assert.ok(getSensorSpec("type-check"));
+        assert.ok(getSensorSpec("linter"));
+        // 2. required-sections sensor:
+        // Bad markdown: only 1 H2
+        const badMarkdown = "# Title\n## Only One Section\nSome content";
+        const req1 = await evaluateRequiredSections({ content: badMarkdown, workspaceDir: tempWs });
+        assert.equal(req1.pass, false);
+        assert.ok(req1.findings[0].includes("minimum of 2 required"));
+        // Good markdown: >= 2 H2
+        const goodMarkdown = "# Title\n## Section One\nContent 1\n## Section Two\nContent 2";
+        const req2 = await evaluateRequiredSections({ content: goodMarkdown, workspaceDir: tempWs });
+        assert.equal(req2.pass, true);
+        // Timestamp marker: always passes
+        const tsRes = await evaluateRequiredSections({
+            content: "# Empty marker",
+            filename: "practices-timestamp.md",
+            workspaceDir: tempWs,
+        });
+        assert.equal(tsRes.pass, true);
+        // Unit DAG with cycle: must detect cyclic error
+        const cyclicDag = `
+# Units of Work Dependency
+## 1. Units DAG
+\`\`\`yaml
+units:
+  - name: u1
+    depends_on:
+      - u2
+  - name: u2
+    depends_on:
+      - u1
+\`\`\`
+## 2. Execution Notes
+Notes here.
+    `;
+        const dagRes = await evaluateRequiredSections({
+            content: cyclicDag,
+            filename: "unit-of-work-dependency.md",
+            workspaceDir: tempWs,
+        });
+        assert.equal(dagRes.pass, false);
+        assert.equal(dagRes.details?.edge_block, "cyclic");
+        assert.ok(dagRes.findings.some((f) => f.includes("Circular dependency")));
+        // 3. claim-sources sensor:
+        // Missing ## Assumptions & Open Questions
+        const noAssumptions = "# Intent\n## Sources\n- [desc] info";
+        const claim1 = await evaluateClaimSources({ content: noAssumptions });
+        assert.equal(claim1.pass, false);
+        assert.ok(claim1.findings.some((f) => f.includes("Assumptions & Open Questions")));
+        // Valid claim tags
+        const validClaims = `
+# Intent Capture
+## 1. Scope
+- [scope] Workflow-selected scope: \`feature\`.
+## 2. Requirements
+We need inventory tracking [desc] and real-time deductions [Q1].
+According to team rules [memory:team#Testing], tests must be automated.
+## 3. Assumptions & Open Questions
+- System will handle 500 RPS [assumption].
+    `;
+        const claim2 = await evaluateClaimSources({ content: validClaims });
+        assert.equal(claim2.pass, true);
+        // 4. traceability sensor:
+        const validTraceability = JSON.stringify({
+            stage: "functional-design",
+            upstream_ids: ["AC1.1", "AC1.2"],
+            coverage: [
+                { id: "AC1.1", status: "OK", target: "BR1.1" },
+                { id: "AC1.2", status: "OK", target: "BR1.2" },
+            ],
+            reverse: [],
+        });
+        const tracePass = evaluateTraceabilityJson(validTraceability);
+        assert.equal(tracePass.pass, true);
+        const gapTraceability = JSON.stringify({
+            stage: "functional-design",
+            upstream_ids: ["AC1.1"],
+            coverage: [{ id: "AC1.1", status: "GAP" }],
+        });
+        const traceFail = evaluateTraceabilityJson(gapTraceability);
+        assert.equal(traceFail.pass, false);
+        assert.ok(traceFail.findings.some((f) => f.includes("Traceability GAP")));
+        // 5. upstream-coverage sensor:
+        const upstreamRes = evaluateUpstreamCoverage({
+            consumes: ["requirements-analysis", "domain-design"],
+            deliverableContents: [
+                "Based on requirements-analysis/ deliverables and `domain-design.md`, we build this unit.",
+            ],
+        });
+        assert.equal(upstreamRes.pass, true);
+        // 6. runStageSensors end-to-end orchestration
+        const report = await runStageSensors({
+            stageSlug: "intent-capture",
+            content: validClaims,
+            workspaceDir: tempWs,
+        });
+        assert.equal(report.overallPass, true);
+        assert.ok(report.results.length >= 2);
     }
     finally {
         await fs.rm(tempWs, { recursive: true, force: true });

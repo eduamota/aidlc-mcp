@@ -46,6 +46,13 @@ It equips AI coding assistants (Claude Code, Cursor, Codex CLI, Antigravity, Kir
    - **Phase Guardrails**: `phases/{ideation,inception,construction,operation}.md` loaded dynamically based on active intent phase.
    - **Self-Learning Diary**: `learnings.md` records runtime human corrections and architectural discoveries with exact citations (`- [memory:M<n>] aidlc/spaces/<space>/memory/<layer>.md#<heading>`).
 
+7. **Deterministic Verification Sensors (`core/sensors/`)**:
+   - **`claim-sources`**: Verifies Intent Capture deliverables carry valid inline provenance citations (`[desc]`, `[scope]`, `[Q<n>]`, `[memory:...]`, `[assumption]`).
+   - **`required-sections`**: Enforces H2 heading count floors, validates template overrides, and inspects Unit of Work DAG YAML blocks for cycle-free topological sort.
+   - **`traceability`**: Validates `traceability.json` matrix and ensures zero unaddressed gaps or orphans.
+   - **`upstream-coverage`**: Checks that stage deliverables cite all declared consumed artifacts.
+   - **`type-check` & `linter`**: Runs automated compiler type-checking and lint rule enforcement on generated code.
+
 ---
 
 ## 🚀 Quick Start
@@ -127,6 +134,8 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `dlc_memory_update` | Affirm or update team-wide or project-local rules under specific H2 headings (`team.md`, `project.md`). |
 | `dlc_memory_record_learning` | Record runtime human corrections and architectural discoveries to `learnings.md`. |
 | `dlc_get_scope_spec` | Retrieve the official specification, execution policies, frontmatter, and rationale for any scope. |
+| `dlc_run_sensors` | Execute deterministic AI-DLC sensors (claim-sources, required-sections, traceability, upstream-coverage). |
+| `dlc_get_sensor_spec` | Retrieve official contracts, trigger events, and failure modes for any of the 6 sensors. |
 
 ### Prompts
 | Prompt | Description |
@@ -154,6 +163,8 @@ Then point your MCP client to `node /path/to/aidlc-mcp/dist/index.js`.
 | `aidlc://scopes` | Scope routing matrix and stage sequences. |
 | `aidlc://scopes/catalog` | Metadata catalog for all 11 official scopes from `core/scopes/`. |
 | `aidlc://scopes/{scope}` | Verbatim markdown execution specification & YAML frontmatter for any scope (e.g. `express`, `bugfix`). |
+| `aidlc://sensors/catalog` | Metadata catalog for all 6 deterministic sensors from `core/sensors/`. |
+| `aidlc://sensors/{id}` | Verbatim markdown specification for any sensor (`claim-sources`, `required-sections`, etc.). |
 | `aidlc://knowledge` | Catalog and index of all 59 core engineering guides + workspace documents. |
 | `aidlc://knowledge/{agent}/{doc}` | Direct markdown access to any core playbook (e.g. `aidlc-architect-agent/ddd-patterns.md`). |
 | `aidlc://audit` | Append-only audit trail of lifecycle events (`audit.jsonl`). |

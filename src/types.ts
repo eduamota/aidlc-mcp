@@ -137,7 +137,10 @@ export type AuditEventType =
   | "PLAN_APPROVAL_GRANTED"
   | "GATE_APPROVED"
   | "DECISION_RECORDED"
-  | "GUARD_REFUSAL";
+  | "GUARD_REFUSAL"
+  | "SENSOR_FIRED"
+  | "SENSOR_PASSED"
+  | "SENSOR_FAILED";
 
 export interface AuditEvent {
   id: string;
