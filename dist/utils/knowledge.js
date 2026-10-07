@@ -1,11 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getKnowledgeDir, getWorkspaceDir, CONFIG } from "../config.js";
+import { getKnowledgeDir, getWorkspaceDir, CONFIG, assertValidWorkspaceDir } from "../config.js";
 import { getAllCoreKnowledgeDocs, getCoreKnowledgeDoc } from "../knowledge/registry.js";
 /**
  * Ensures knowledge directories exist for a space.
  */
 export async function ensureKnowledgeDirs(workspaceDir = getWorkspaceDir(), space = CONFIG.DEFAULT_SPACE) {
+    if (!workspaceDir || workspaceDir === "/")
+        return "";
     const kDir = getKnowledgeDir(workspaceDir, space);
     await fs.mkdir(path.join(kDir, "aidlc-shared"), { recursive: true });
     await fs.mkdir(path.join(kDir, "documents"), { recursive: true });
@@ -16,6 +18,7 @@ export async function ensureKnowledgeDirs(workspaceDir = getWorkspaceDir(), spac
  */
 export async function addKnowledgeDocument(params) {
     const ws = params.workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     const space = params.space || CONFIG.DEFAULT_SPACE;
     const kDir = await ensureKnowledgeDirs(ws, space);
     let targetDir = path.join(kDir, "documents");
@@ -45,46 +48,48 @@ export async function addKnowledgeDocument(params) {
  * Lists all knowledge documents in the active space.
  */
 export async function listKnowledgeDocuments(workspaceDir = getWorkspaceDir(), space = CONFIG.DEFAULT_SPACE) {
-    const kDir = getKnowledgeDir(workspaceDir, space);
     const workspaceDocs = [];
-    async function walk(dir, category, agentName) {
-        try {
-            const entries = await fs.readdir(dir, { withFileTypes: true });
-            for (const entry of entries) {
-                const fullPath = path.join(dir, entry.name);
-                if (entry.isDirectory()) {
-                    if (entry.name === "aidlc-shared") {
-                        await walk(fullPath, "shared");
+    if (workspaceDir && workspaceDir !== "/") {
+        const kDir = getKnowledgeDir(workspaceDir, space);
+        async function walk(dir, category, agentName) {
+            try {
+                const entries = await fs.readdir(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dir, entry.name);
+                    if (entry.isDirectory()) {
+                        if (entry.name === "aidlc-shared") {
+                            await walk(fullPath, "shared");
+                        }
+                        else if (entry.name === "documents") {
+                            await walk(fullPath, "documentkb");
+                        }
+                        else {
+                            await walk(fullPath, "agent", entry.name);
+                        }
                     }
-                    else if (entry.name === "documents") {
-                        await walk(fullPath, "documentkb");
+                    else if (entry.isFile() && !entry.name.startsWith(".")) {
+                        try {
+                            const stat = await fs.stat(fullPath);
+                            const content = await fs.readFile(fullPath, "utf-8");
+                            workspaceDocs.push({
+                                id: entry.name.replace(/\.[^/.]+$/, ""),
+                                filename: entry.name,
+                                relativePath: path.relative(workspaceDir, fullPath),
+                                category,
+                                agent: agentName,
+                                sizeBytes: stat.size,
+                                updatedAt: stat.mtime.toISOString(),
+                                preview: content.slice(0, 200),
+                            });
+                        }
+                        catch { }
                     }
-                    else {
-                        await walk(fullPath, "agent", entry.name);
-                    }
-                }
-                else if (entry.isFile() && !entry.name.startsWith(".")) {
-                    try {
-                        const stat = await fs.stat(fullPath);
-                        const content = await fs.readFile(fullPath, "utf-8");
-                        workspaceDocs.push({
-                            id: entry.name.replace(/\.[^/.]+$/, ""),
-                            filename: entry.name,
-                            relativePath: path.relative(workspaceDir, fullPath),
-                            category,
-                            agent: agentName,
-                            sizeBytes: stat.size,
-                            updatedAt: stat.mtime.toISOString(),
-                            preview: content.slice(0, 200),
-                        });
-                    }
-                    catch { }
                 }
             }
+            catch { }
         }
-        catch { }
+        await walk(kDir, "documentkb");
     }
-    await walk(kDir, "documentkb");
     // Merge built-in core knowledge documents
     const coreDocs = getAllCoreKnowledgeDocs().map((c) => ({
         id: c.id,

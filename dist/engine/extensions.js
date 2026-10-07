@@ -430,16 +430,18 @@ export function loadAllExtensions(workspaceDir) {
             packs.push(orgPack);
         }
     }
-    // Tier 3: Workspace Local (.aidlc/ or aidlc/custom/)
-    const localDotAidlc = path.join(ws, ".aidlc");
-    const localDotPack = loadExtensionPack(localDotAidlc, "tier3-workspace");
-    if (localDotPack) {
-        packs.push(localDotPack);
-    }
-    const localAidlcCustom = path.join(ws, "aidlc", "custom");
-    const localCustomPack = loadExtensionPack(localAidlcCustom, "tier3-workspace");
-    if (localCustomPack) {
-        packs.push(localCustomPack);
+    // Tier 3: Workspace Local (.aidlc/ or aidlc/custom/) - only if valid project workspace
+    if (ws && ws !== "/") {
+        const localDotAidlc = path.join(ws, ".aidlc");
+        const localDotPack = loadExtensionPack(localDotAidlc, "tier3-workspace");
+        if (localDotPack) {
+            packs.push(localDotPack);
+        }
+        const localAidlcCustom = path.join(ws, "aidlc", "custom");
+        const localCustomPack = loadExtensionPack(localAidlcCustom, "tier3-workspace");
+        if (localCustomPack) {
+            packs.push(localCustomPack);
+        }
     }
     // Aggregate into merged caches
     const mergedScopes = {};

@@ -18,8 +18,21 @@ export async function appendAuditLog(
   workspaceDir?: string
 ): Promise<AuditEvent> {
   const ws = workspaceDir || getWorkspaceDir();
-  let intentId = params.intentId;
+  const event: AuditEvent = {
+    id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    timestamp: new Date().toISOString(),
+    type: params.type,
+    intentId: params.intentId,
+    stageId: params.stageId,
+    summary: params.summary,
+    details: params.details,
+  };
 
+  if (!ws || ws === "/") {
+    return event;
+  }
+
+  let intentId = params.intentId;
   if (!intentId) {
     try {
       const active = await loadActiveIntentState(ws);
@@ -27,15 +40,7 @@ export async function appendAuditLog(
     } catch {}
   }
 
-  const event: AuditEvent = {
-    id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    timestamp: new Date().toISOString(),
-    type: params.type,
-    intentId,
-    stageId: params.stageId,
-    summary: params.summary,
-    details: params.details,
-  };
+  event.intentId = intentId;
 
   try {
     let auditDir: string;
@@ -60,6 +65,9 @@ export async function appendAuditLog(
  */
 export async function readAuditTrail(intentId?: string, workspaceDir?: string): Promise<AuditEvent[]> {
   const ws = workspaceDir || getWorkspaceDir();
+  if (!ws || ws === "/") {
+    return [];
+  }
   let targetIntentId = intentId;
 
   if (!targetIntentId) {

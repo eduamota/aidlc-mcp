@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getWorkspaceDir, getSpaceDir, getMemoryDir, getMemoryPhasesDir, CONFIG } from "../config.js";
+import { getWorkspaceDir, getSpaceDir, getMemoryDir, getMemoryPhasesDir, CONFIG, assertValidWorkspaceDir } from "../config.js";
 import { Phase } from "../types.js";
 import { getMemoryDefault } from "../memory/registry.js";
 
@@ -11,6 +11,7 @@ export async function ensureMemoryDirs(
   workspaceDir: string = getWorkspaceDir(),
   space: string = CONFIG.DEFAULT_SPACE
 ): Promise<string> {
+  if (!workspaceDir || workspaceDir === "/") return "";
   const memDir = getMemoryDir(workspaceDir, space);
   const phasesDir = getMemoryPhasesDir(workspaceDir, space);
 
@@ -50,6 +51,9 @@ export async function readMemoryLayer(
   space: string = CONFIG.DEFAULT_SPACE
 ): Promise<string> {
   const ws = workspaceDir || getWorkspaceDir();
+  if (!ws || ws === "/") {
+    return getMemoryDefault(layer) || "";
+  }
   await ensureMemoryDirs(ws, space);
   const memDir = getMemoryDir(ws, space);
 
@@ -83,7 +87,9 @@ export async function resolveActiveMemory(params?: {
 }> {
   const ws = params?.workspaceDir || getWorkspaceDir();
   const space = params?.space || CONFIG.DEFAULT_SPACE;
-  await ensureMemoryDirs(ws, space);
+  if (ws && ws !== "/") {
+    await ensureMemoryDirs(ws, space);
+  }
 
   const memDir = getMemoryDir(ws, space);
   const phasesDir = getMemoryPhasesDir(ws, space);
@@ -198,6 +204,7 @@ export async function updateMemoryRule(
   space: string = CONFIG.DEFAULT_SPACE
 ): Promise<{ success: boolean; filePath: string }> {
   const ws = workspaceDir || getWorkspaceDir();
+  assertValidWorkspaceDir(ws);
   await ensureMemoryDirs(ws, space);
   const memDir = getMemoryDir(ws, space);
   const targetFile = path.join(memDir, `${layer}.md`);
@@ -257,6 +264,7 @@ export async function recordLearning(params: {
   space?: string;
 }): Promise<{ success: boolean; filePath: string }> {
   const ws = params.workspaceDir || getWorkspaceDir();
+  assertValidWorkspaceDir(ws);
   const space = params.space || CONFIG.DEFAULT_SPACE;
   await ensureMemoryDirs(ws, space);
   const memDir = getMemoryDir(ws, space);

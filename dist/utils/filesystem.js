@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { CONFIG, getWorkspaceDir, getIntentsDir, getActiveIntentPointerPath } from "../config.js";
+import { CONFIG, getWorkspaceDir, getIntentsDir, getActiveIntentPointerPath, assertValidWorkspaceDir } from "../config.js";
 import { ensureMemoryDirs } from "./memory.js";
 /**
  * Generates an intent ID following the YYMMDD-<label> format.
@@ -71,6 +71,7 @@ export function formatAidlcStateMarkdown(state) {
  * Scaffolds an intent folder and initial state files.
  */
 export async function scaffoldIntent(state, workspaceDir = getWorkspaceDir()) {
+    assertValidWorkspaceDir(workspaceDir);
     const intentDir = getIntentDirPath(state.intentId, workspaceDir);
     await fs.mkdir(intentDir, { recursive: true });
     await ensureMemoryDirs(workspaceDir);
@@ -100,6 +101,7 @@ export async function scaffoldIntent(state, workspaceDir = getWorkspaceDir()) {
  * Saves updated IntentState back to disk.
  */
 export async function persistIntentState(state, workspaceDir = getWorkspaceDir()) {
+    assertValidWorkspaceDir(workspaceDir);
     state.updatedAt = new Date().toISOString();
     const intentDir = getIntentDirPath(state.intentId, workspaceDir);
     await fs.mkdir(intentDir, { recursive: true });
@@ -112,6 +114,8 @@ export async function persistIntentState(state, workspaceDir = getWorkspaceDir()
  * Loads IntentState for a specific intent ID.
  */
 export async function loadIntentState(intentId, workspaceDir = getWorkspaceDir()) {
+    if (!workspaceDir || workspaceDir === "/")
+        return null;
     const intentDir = getIntentDirPath(intentId, workspaceDir);
     const stateJsonPath = path.join(intentDir, "intent-state.json");
     try {
@@ -126,6 +130,7 @@ export async function loadIntentState(intentId, workspaceDir = getWorkspaceDir()
  * Sets the active intent ID.
  */
 export async function setActiveIntent(intentId, workspaceDir = getWorkspaceDir()) {
+    assertValidWorkspaceDir(workspaceDir);
     const pointerPath = getActiveIntentPointerPath(workspaceDir);
     await fs.mkdir(path.dirname(pointerPath), { recursive: true });
     await fs.writeFile(pointerPath, JSON.stringify({ activeIntentId: intentId, updatedAt: new Date().toISOString() }, null, 2), "utf-8");
@@ -134,6 +139,8 @@ export async function setActiveIntent(intentId, workspaceDir = getWorkspaceDir()
  * Gets the active intent ID.
  */
 export async function getActiveIntentId(workspaceDir = getWorkspaceDir()) {
+    if (!workspaceDir || workspaceDir === "/")
+        return null;
     const pointerPath = getActiveIntentPointerPath(workspaceDir);
     try {
         const raw = await fs.readFile(pointerPath, "utf-8");
@@ -157,6 +164,8 @@ export async function loadActiveIntentState(workspaceDir = getWorkspaceDir()) {
  * Lists all existing intents in the workspace.
  */
 export async function listAllIntents(workspaceDir = getWorkspaceDir()) {
+    if (!workspaceDir || workspaceDir === "/")
+        return [];
     const intentsDir = getIntentsDir(workspaceDir);
     try {
         const entries = await fs.readdir(intentsDir, { withFileTypes: true });
@@ -170,6 +179,7 @@ export async function listAllIntents(workspaceDir = getWorkspaceDir()) {
  * Saves a stage artifact file inside the intent directory.
  */
 export async function saveStageArtifact(intentId, phase, artifactName, content, workspaceDir = getWorkspaceDir()) {
+    assertValidWorkspaceDir(workspaceDir);
     const intentDir = getIntentDirPath(intentId, workspaceDir);
     const phaseDir = path.join(intentDir, phase);
     await fs.mkdir(phaseDir, { recursive: true });

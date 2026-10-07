@@ -4,7 +4,7 @@ import { SCOPES, createStagesForScope } from "./profiles.js";
 import { STAGE_DEFINITIONS, evaluateRubric } from "./socratic-rubric.js";
 import { getCustomScopeDefinition, getCustomStageDefinition } from "./extensions.js";
 import { generateIntentId, scaffoldIntent, loadActiveIntentState, loadIntentState, persistIntentState, saveStageArtifact, setActiveIntent, getIntentDirPath, } from "../utils/filesystem.js";
-import { getWorkspaceDir } from "../config.js";
+import { getWorkspaceDir, assertValidWorkspaceDir } from "../config.js";
 import { appendAuditLog } from "./audit.js";
 export class DlcStateMachine {
     /**
@@ -12,6 +12,7 @@ export class DlcStateMachine {
      */
     static async initIntent(params) {
         const ws = params.workspaceDir || getWorkspaceDir();
+        assertValidWorkspaceDir(ws);
         const profile = params.profile || "feature";
         const projectType = params.projectType || "greenfield";
         const scopeDef = SCOPES[profile] || getCustomScopeDefinition(profile, ws);
@@ -51,6 +52,7 @@ export class DlcStateMachine {
      */
     static async switchIntent(intentId, workspaceDir) {
         const ws = workspaceDir || getWorkspaceDir();
+        assertValidWorkspaceDir(ws);
         const intent = await loadIntentState(intentId, ws);
         if (!intent) {
             throw new Error(`Intent '${intentId}' not found in workspace.`);
@@ -95,6 +97,7 @@ export class DlcStateMachine {
      */
     static async submitDraft(params) {
         const ws = params.workspaceDir || getWorkspaceDir();
+        assertValidWorkspaceDir(ws);
         const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
         if (!intent) {
             throw new Error("No active intent found. Run dlc_init_intent first.");
@@ -174,6 +177,7 @@ export class DlcStateMachine {
      */
     static async approveGate(params) {
         const ws = params.workspaceDir || getWorkspaceDir();
+        assertValidWorkspaceDir(ws);
         const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
         if (!intent) {
             throw new Error("No active intent found.");
@@ -254,6 +258,7 @@ export class DlcStateMachine {
      */
     static async logDecision(params) {
         const ws = params.workspaceDir || getWorkspaceDir();
+        assertValidWorkspaceDir(ws);
         const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
         if (!intent)
             throw new Error("No active intent found.");
@@ -289,6 +294,7 @@ export class DlcStateMachine {
      */
     static async requestReview(params) {
         const ws = params.workspaceDir || getWorkspaceDir();
+        assertValidWorkspaceDir(ws);
         const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
         if (!intent)
             throw new Error("No active intent found.");
@@ -369,6 +375,7 @@ export class DlcStateMachine {
      */
     static async reopenStage(params) {
         const ws = params.workspaceDir || getWorkspaceDir();
+        assertValidWorkspaceDir(ws);
         const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
         if (!intent)
             throw new Error("No active intent found.");

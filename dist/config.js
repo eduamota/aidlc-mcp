@@ -17,6 +17,21 @@ export function setActiveWorkspaceDir(dir) {
 export function getActiveWorkspaceDir() {
     return activeWorkspaceDir;
 }
+export function hasValidWorkspaceDir() {
+    try {
+        const ws = getWorkspaceDir();
+        return Boolean(ws && ws !== "/");
+    }
+    catch {
+        return false;
+    }
+}
+export function assertValidWorkspaceDir(ws = getWorkspaceDir()) {
+    if (!ws || ws === "/" || ws.trim() === "") {
+        throw new Error("AI-DLC workspace cannot be filesystem root ('/'). The MCP server daemon was spawned without a project working directory. Please provide the 'workspace' argument in your tool call (e.g. workspace: '/path/to/project'), configure 'AIDLC_WORKSPACE' in your MCP server env config, or specify 'cwd' in mcp_config.json.");
+    }
+    return ws;
+}
 export function getWorkspaceDir() {
     // 1. Explicit AIDLC_WORKSPACE environment variable
     if (process.env.AIDLC_WORKSPACE && process.env.AIDLC_WORKSPACE.trim() !== "" && process.env.AIDLC_WORKSPACE.trim() !== "/") {
@@ -39,13 +54,9 @@ export function getWorkspaceDir() {
             return path.resolve(cand.trim());
         }
     }
-    // 4. Process working directory if not root
+    // 4. Process working directory (fallback, safe for startup even if root "/")
     const cwd = process.cwd();
-    if (cwd && cwd !== "/") {
-        return path.resolve(cwd);
-    }
-    // 5. If root (/), throw an informative, actionable error
-    throw new Error("AI-DLC workspace cannot be filesystem root ('/'). The MCP server daemon was spawned without a project working directory. Please provide the 'workspace' argument in your tool call (e.g. workspace: '/path/to/project'), configure 'AIDLC_WORKSPACE' in your MCP server env config, or specify 'cwd' in mcp_config.json.");
+    return cwd ? path.resolve(cwd) : "/";
 }
 export function getSpaceDir(workspaceDir = getWorkspaceDir(), space = CONFIG.DEFAULT_SPACE) {
     return path.join(workspaceDir, CONFIG.BASE_DIR_REL, space);

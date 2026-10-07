@@ -1,11 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getWorkspaceDir, getMemoryDir, getMemoryPhasesDir, CONFIG } from "../config.js";
+import { getWorkspaceDir, getMemoryDir, getMemoryPhasesDir, CONFIG, assertValidWorkspaceDir } from "../config.js";
 import { getMemoryDefault } from "../memory/registry.js";
 /**
  * Ensures memory directories exist and seeds default memory files if missing.
  */
 export async function ensureMemoryDirs(workspaceDir = getWorkspaceDir(), space = CONFIG.DEFAULT_SPACE) {
+    if (!workspaceDir || workspaceDir === "/")
+        return "";
     const memDir = getMemoryDir(workspaceDir, space);
     const phasesDir = getMemoryPhasesDir(workspaceDir, space);
     await fs.mkdir(memDir, { recursive: true });
@@ -37,6 +39,9 @@ export async function ensureMemoryDirs(workspaceDir = getWorkspaceDir(), space =
  */
 export async function readMemoryLayer(layer, workspaceDir = getWorkspaceDir(), space = CONFIG.DEFAULT_SPACE) {
     const ws = workspaceDir || getWorkspaceDir();
+    if (!ws || ws === "/") {
+        return getMemoryDefault(layer) || "";
+    }
     await ensureMemoryDirs(ws, space);
     const memDir = getMemoryDir(ws, space);
     let targetFile = path.join(memDir, `${layer}.md`);
@@ -56,7 +61,9 @@ export async function readMemoryLayer(layer, workspaceDir = getWorkspaceDir(), s
 export async function resolveActiveMemory(params) {
     const ws = params?.workspaceDir || getWorkspaceDir();
     const space = params?.space || CONFIG.DEFAULT_SPACE;
-    await ensureMemoryDirs(ws, space);
+    if (ws && ws !== "/") {
+        await ensureMemoryDirs(ws, space);
+    }
     const memDir = getMemoryDir(ws, space);
     const phasesDir = getMemoryPhasesDir(ws, space);
     async function readFileOrDefault(filePath, defaultKey) {
@@ -147,6 +154,7 @@ export async function getMemoryRule(layer, heading, workspaceDir = getWorkspaceD
  */
 export async function updateMemoryRule(layer, heading, content, workspaceDir = getWorkspaceDir(), space = CONFIG.DEFAULT_SPACE) {
     const ws = workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     await ensureMemoryDirs(ws, space);
     const memDir = getMemoryDir(ws, space);
     const targetFile = path.join(memDir, `${layer}.md`);
@@ -193,6 +201,7 @@ export async function updateMemoryRule(layer, heading, content, workspaceDir = g
  */
 export async function recordLearning(params) {
     const ws = params.workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     const space = params.space || CONFIG.DEFAULT_SPACE;
     await ensureMemoryDirs(ws, space);
     const memDir = getMemoryDir(ws, space);

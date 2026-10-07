@@ -9,6 +9,8 @@ export declare const CONFIG: {
 };
 export declare function setActiveWorkspaceDir(dir?: string): void;
 export declare function getActiveWorkspaceDir(): string | null;
+export declare function hasValidWorkspaceDir(): boolean;
+export declare function assertValidWorkspaceDir(ws?: string): string;
 export declare function getWorkspaceDir(): string;
 export declare function getSpaceDir(workspaceDir?: string, space?: string): string;
 export declare function getIntentsDir(workspaceDir?: string, space?: string): string;

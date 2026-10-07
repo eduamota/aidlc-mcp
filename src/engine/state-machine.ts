@@ -14,7 +14,7 @@ import {
   setActiveIntent,
   getIntentDirPath,
 } from "../utils/filesystem.js";
-import { getWorkspaceDir } from "../config.js";
+import { getWorkspaceDir, assertValidWorkspaceDir } from "../config.js";
 import { appendAuditLog } from "./audit.js";
 
 export class DlcStateMachine {
@@ -31,6 +31,7 @@ export class DlcStateMachine {
     workspaceDir?: string;
   }): Promise<{ intent: IntentState; intentDir: string }> {
     const ws = params.workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     const profile = params.profile || "feature";
     const projectType = params.projectType || "greenfield";
 
@@ -77,6 +78,7 @@ export class DlcStateMachine {
    */
   public static async switchIntent(intentId: string, workspaceDir?: string): Promise<IntentState> {
     const ws = workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     const intent = await loadIntentState(intentId, ws);
     if (!intent) {
       throw new Error(`Intent '${intentId}' not found in workspace.`);
@@ -141,6 +143,7 @@ export class DlcStateMachine {
     stageUpdated: boolean;
   }> {
     const ws = params.workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
 
     if (!intent) {
@@ -250,6 +253,7 @@ export class DlcStateMachine {
     message: string;
   }> {
     const ws = params.workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
 
     if (!intent) {
@@ -353,6 +357,7 @@ export class DlcStateMachine {
     workspaceDir?: string;
   }): Promise<{ logged: boolean; count: number }> {
     const ws = params.workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
     if (!intent) throw new Error("No active intent found.");
 
@@ -404,6 +409,7 @@ export class DlcStateMachine {
     reviewSummary: string;
   }> {
     const ws = params.workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
     if (!intent) throw new Error("No active intent found.");
 
@@ -504,6 +510,7 @@ export class DlcStateMachine {
     workspaceDir?: string;
   }): Promise<{ success: boolean; reopenedStageId: string; message: string }> {
     const ws = params.workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     const intent = params.intentId ? await loadIntentState(params.intentId, ws) : await loadActiveIntentState(ws);
     if (!intent) throw new Error("No active intent found.");
 

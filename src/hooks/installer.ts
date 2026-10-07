@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getWorkspaceDir } from "../config.js";
+import { getWorkspaceDir, assertValidWorkspaceDir } from "../config.js";
 
 export interface InstallHooksOptions {
   target: "claude-code" | "cursor" | "git" | "all";
@@ -18,6 +18,7 @@ export interface InstallHooksResult {
  */
 export async function installHooks(options: InstallHooksOptions): Promise<InstallHooksResult> {
   const ws = options.workspaceDir || getWorkspaceDir();
+  assertValidWorkspaceDir(ws);
   const installed: string[] = [];
   const skipped: string[] = [];
   const instructions: string[] = [];

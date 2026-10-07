@@ -1,11 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getWorkspaceDir } from "../config.js";
+import { getWorkspaceDir, assertValidWorkspaceDir } from "../config.js";
 /**
  * Installs client harness lifecycle hooks for Claude Code, Cursor, or Git.
  */
 export async function installHooks(options) {
     const ws = options.workspaceDir || getWorkspaceDir();
+    assertValidWorkspaceDir(ws);
     const installed = [];
     const skipped = [];
     const instructions = [];

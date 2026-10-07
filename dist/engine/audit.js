@@ -7,6 +7,18 @@ import { getIntentDirPath, loadActiveIntentState } from "../utils/filesystem.js"
  */
 export async function appendAuditLog(params, workspaceDir) {
     const ws = workspaceDir || getWorkspaceDir();
+    const event = {
+        id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: new Date().toISOString(),
+        type: params.type,
+        intentId: params.intentId,
+        stageId: params.stageId,
+        summary: params.summary,
+        details: params.details,
+    };
+    if (!ws || ws === "/") {
+        return event;
+    }
     let intentId = params.intentId;
     if (!intentId) {
         try {
@@ -16,15 +28,7 @@ export async function appendAuditLog(params, workspaceDir) {
         }
         catch { }
     }
-    const event = {
-        id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        timestamp: new Date().toISOString(),
-        type: params.type,
-        intentId,
-        stageId: params.stageId,
-        summary: params.summary,
-        details: params.details,
-    };
+    event.intentId = intentId;
     try {
         let auditDir;
         if (intentId) {
@@ -47,6 +51,9 @@ export async function appendAuditLog(params, workspaceDir) {
  */
 export async function readAuditTrail(intentId, workspaceDir) {
     const ws = workspaceDir || getWorkspaceDir();
+    if (!ws || ws === "/") {
+        return [];
+    }
     let targetIntentId = intentId;
     if (!targetIntentId) {
         const active = await loadActiveIntentState(ws);

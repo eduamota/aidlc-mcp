@@ -840,6 +840,17 @@ test("Workspace Resolution & Root Directory Safety", async () => {
         assert.equal(rootReport.workspaceDir, "/");
         assert.equal(rootReport.overallStatus, "error");
         assert.ok(rootReport.checks.some((c) => c.name === "Workspace Directory Resolution" && c.status === "fail"));
+        // 4. loadAllExtensions with root does not crash during startup/registration
+        const extCache = loadAllExtensions("/");
+        assert.ok(extCache);
+        // 5. Mutating operations throw actionable error when workspace is root
+        await assert.rejects(async () => {
+            await DlcStateMachine.initIntent({
+                label: "test-root",
+                description: "should fail safely",
+                workspaceDir: "/",
+            });
+        }, /AI-DLC workspace cannot be filesystem root/);
     }
     finally {
         setActiveWorkspaceDir(undefined);
