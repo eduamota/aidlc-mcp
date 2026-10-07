@@ -7,6 +7,7 @@ import { DlcStateMachine } from "./state-machine.js";
 import { evaluateRubric } from "./socratic-rubric.js";
 import { SCOPES, createStagesForScope, getScopeSpec, getAllScopeSpecs, detectScopeFromPrompt } from "./profiles.js";
 import { runDlcDoctor } from "../utils/doctor.js";
+import { getWorkspaceDir, setActiveWorkspaceDir } from "../config.js";
 import { addKnowledgeDocument, listKnowledgeDocuments, readKnowledgeDocument } from "../utils/knowledge.js";
 import { STAGE_PROTOCOL, REVIEWER_PROTOCOL, CONSTRUCTION_PROTOCOL, RECOVERY_PROTOCOL, } from "./protocols.js";
 import { getStageSpec, getAllStageSpecs } from "../stages/registry.js";
@@ -822,6 +823,27 @@ Full compliance checklist verified.
         clearExtensionCache();
         await fs.rm(orgFlowsDir, { recursive: true, force: true });
         await fs.rm(tempWs, { recursive: true, force: true });
+    }
+});
+test("Workspace Resolution & Root Directory Safety", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "aidlc-ws-test-"));
+    try {
+        // 1. setActiveWorkspaceDir anchors workspace dynamically
+        setActiveWorkspaceDir(tempDir);
+        assert.equal(getWorkspaceDir(), tempDir);
+        // 2. Doctor report runs cleanly with anchored workspace
+        const report = await runDlcDoctor(tempDir);
+        assert.equal(report.workspaceDir, tempDir);
+        assert.ok(report.checks.some((c) => c.name === "Workspace Directory Resolution" && c.status === "pass"));
+        // 3. Doctor report with root workspace does not crash or throw ENOENT, but produces clear failure check
+        const rootReport = await runDlcDoctor("/");
+        assert.equal(rootReport.workspaceDir, "/");
+        assert.equal(rootReport.overallStatus, "error");
+        assert.ok(rootReport.checks.some((c) => c.name === "Workspace Directory Resolution" && c.status === "fail"));
+    }
+    finally {
+        setActiveWorkspaceDir(undefined);
+        await fs.rm(tempDir, { recursive: true, force: true });
     }
 });
 //# sourceMappingURL=engine.test.js.map

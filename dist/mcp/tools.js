@@ -12,7 +12,7 @@ import { executeHook } from "../hooks/runner.js";
 import { installHooks } from "../hooks/installer.js";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getWorkspaceDir } from "../config.js";
+import { getWorkspaceDir, setActiveWorkspaceDir } from "../config.js";
 import { resolveActiveMemory, getMemoryRule, updateMemoryRule, recordLearning, readMemoryLayer, } from "../utils/memory.js";
 import { runStageSensors } from "../engine/sensors.js";
 import { getSensorSpec } from "../sensors/registry.js";
@@ -50,11 +50,25 @@ const SCOPE_ENUM = [
     "auto",
     ...SCOPE_ENUM_STRICT,
 ];
+const workspaceSchema = z
+    .string()
+    .optional()
+    .describe("Optional target project workspace root path. Anchors the active workspace for this and subsequent tool calls.");
+function resolveWs(workspace) {
+    if (workspace && typeof workspace === "string" && workspace.trim() !== "" && workspace.trim() !== "/") {
+        setActiveWorkspaceDir(workspace);
+        return path.resolve(workspace.trim());
+    }
+    return getWorkspaceDir();
+}
 export function registerDlcTools(server) {
     // 1. dlc_doctor: System Health & Diagnostics
-    server.tool("dlc_doctor", "Run comprehensive AI-DLC environment and workspace diagnostics (checks Node.js, Git, permissions, active space, and intent health).", {}, async () => {
+    server.tool("dlc_doctor", "Run comprehensive AI-DLC environment and workspace diagnostics (checks Node.js, Git, permissions, active space, and intent health).", {
+        workspace: workspaceSchema,
+    }, async ({ workspace }) => {
         try {
-            const report = await runDlcDoctor();
+            const ws = workspace ? resolveWs(workspace) : undefined;
+            const report = await runDlcDoctor(ws);
             const statusEmoji = report.overallStatus === "healthy" ? "✅" : report.overallStatus === "warning" ? "⚠️" : "❌";
             const lines = [
                 `# ${statusEmoji} AI-DLC Doctor Diagnostic Report`,
@@ -101,11 +115,13 @@ export function registerDlcTools(server) {
             .optional()
             .default("auto")
             .describe("Project type: 'greenfield' (new project), 'brownfield' (existing code, injects reverse-engineering), or 'auto' (scans workspace automatically)"),
-    }, async ({ label, description, scope, depth, testStrategy, projectType }) => {
+        workspace: workspaceSchema,
+    }, async ({ label, description, scope, depth, testStrategy, projectType, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             let resolvedType = "greenfield";
             if (projectType === "auto") {
-                const scan = await scanWorkspaceForReverseEngineering();
+                const scan = await scanWorkspaceForReverseEngineering(ws);
                 resolvedType = scan.projectType;
             }
             else {
@@ -122,6 +138,7 @@ export function registerDlcTools(server) {
                 projectType: resolvedType,
                 depth,
                 testStrategy,
+                workspaceDir: ws,
             });
             const activeStage = intent.stages[0];
             const stageDef = STAGE_DEFINITIONS[activeStage.id];
@@ -159,9 +176,11 @@ export function registerDlcTools(server) {
     // 3. dlc_get_status: Active Lifecycle Status
     server.tool("dlc_get_status", "Get the current status, active intent, current stage, gate readiness, and unresolved Socratic probes.", {
         intentId: z.string().optional().describe("Optional intent ID. Defaults to the active intent."),
-    }, async ({ intentId }) => {
+        workspace: workspaceSchema,
+    }, async ({ intentId, workspace }) => {
         try {
-            const status = await DlcStateMachine.getStatus(intentId);
+            const ws = resolveWs(workspace);
+            const status = await DlcStateMachine.getStatus(intentId, ws);
             if (!status.intent) {
                 return {
                     content: [
@@ -449,13 +468,16 @@ export function registerDlcTools(server) {
         stageId: z.string().optional().describe("Stage ID. Defaults to the active stage."),
         artifactName: z.string().optional().describe("Custom artifact filename (e.g. 'requirements.md'). Defaults to standard stage artifact name."),
         intentId: z.string().optional().describe("Optional intent ID."),
-    }, async ({ content, stageId, artifactName, intentId }) => {
+        workspace: workspaceSchema,
+    }, async ({ content, stageId, artifactName, intentId, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             const result = await DlcStateMachine.submitDraft({
                 stageId,
                 artifactName,
                 content,
                 intentId,
+                workspaceDir: ws,
             });
             const { evaluation, artifactPath } = result;
             const lines = [
@@ -499,13 +521,16 @@ export function registerDlcTools(server) {
         notes: z.string().optional().describe("Approval notes, user confirmation, or decisions recorded."),
         force: z.boolean().optional().default(false).describe("Set true to bypass rubric satisfaction check if explicitly requested by user."),
         intentId: z.string().optional().describe("Optional intent ID."),
-    }, async ({ stageId, notes, force, intentId }) => {
+        workspace: workspaceSchema,
+    }, async ({ stageId, notes, force, intentId, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             const result = await DlcStateMachine.approveGate({
                 stageId,
                 notes,
                 force,
                 intentId,
+                workspaceDir: ws,
             });
             const lines = [
                 `# Gate Approved: Stage '${result.previousStageId}'`,
@@ -528,9 +553,12 @@ export function registerDlcTools(server) {
         }
     });
     // 13. dlc_list_intents: List Tracked Intents
-    server.tool("dlc_list_intents", "List all AI-DLC intents tracked in the current workspace.", {}, async () => {
+    server.tool("dlc_list_intents", "List all AI-DLC intents tracked in the current workspace.", {
+        workspace: workspaceSchema,
+    }, async ({ workspace }) => {
         try {
-            const intents = await listAllIntents();
+            const ws = resolveWs(workspace);
+            const intents = await listAllIntents(ws);
             if (intents.length === 0) {
                 return {
                     content: [{ type: "text", text: "No intents found in `./aidlc/spaces/default/intents/`." }],
@@ -558,7 +586,10 @@ export function registerDlcTools(server) {
             .optional()
             .default("all")
             .describe("Target AI client / harness to get specific instructions for (default: 'all')"),
-    }, async ({ client }) => {
+        workspace: workspaceSchema,
+    }, async ({ client, workspace }) => {
+        if (workspace)
+            resolveWs(workspace);
         const selected = client || "all";
         const sections = [
             "# AI-DLC Socratic MCP: Setup & Environment Requirements",
@@ -659,14 +690,17 @@ export function registerDlcTools(server) {
         optionsConsidered: z.array(z.string()).optional().describe("Alternative approaches considered"),
         stageId: z.string().optional().describe("Associated stage ID. Defaults to active stage."),
         intentId: z.string().optional().describe("Optional intent ID."),
-    }, async ({ decision, rationale, optionsConsidered, stageId, intentId }) => {
+        workspace: workspaceSchema,
+    }, async ({ decision, rationale, optionsConsidered, stageId, intentId, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             const result = await DlcStateMachine.logDecision({
                 decision,
                 rationale,
                 optionsConsidered,
                 stageId,
                 intentId,
+                workspaceDir: ws,
             });
             return {
                 content: [
@@ -689,12 +723,15 @@ export function registerDlcTools(server) {
         stageId: z.string().optional().describe("Stage ID to review. Defaults to active stage."),
         reviewer: z.string().optional().describe("Reviewer persona name (e.g. 'aidlc-architecture-reviewer-agent')."),
         intentId: z.string().optional().describe("Optional intent ID."),
-    }, async ({ stageId, reviewer, intentId }) => {
+        workspace: workspaceSchema,
+    }, async ({ stageId, reviewer, intentId, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             const result = await DlcStateMachine.requestReview({
                 stageId,
                 reviewer,
                 intentId,
+                workspaceDir: ws,
             });
             const icon = result.verdict === "APPROVED" ? "✅" : result.verdict === "ADVISORY" ? "ℹ️" : "⚠️";
             const lines = [
@@ -722,12 +759,15 @@ export function registerDlcTools(server) {
         stageId: z.string().describe("Stage ID to reopen (e.g. 'domain-design', 'intent-capture')"),
         reason: z.string().optional().describe("Reason for reopening stage"),
         intentId: z.string().optional().describe("Optional intent ID."),
-    }, async ({ stageId, reason, intentId }) => {
+        workspace: workspaceSchema,
+    }, async ({ stageId, reason, intentId, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             const result = await DlcStateMachine.reopenStage({
                 stageId,
                 reason,
                 intentId,
+                workspaceDir: ws,
             });
             return {
                 content: [
@@ -752,11 +792,13 @@ export function registerDlcTools(server) {
             .optional()
             .describe("Stage ID or slug (e.g. 'requirements-analysis', 'domain-design', 'intent-capture'). Defaults to active stage."),
         intentId: z.string().optional().describe("Optional intent ID."),
-    }, async ({ stageId, intentId }) => {
+        workspace: workspaceSchema,
+    }, async ({ stageId, intentId, workspace }) => {
         try {
+            const ws = workspace ? resolveWs(workspace) : undefined;
             let targetId = stageId;
             if (!targetId) {
-                const status = await DlcStateMachine.getStatus(intentId);
+                const status = await DlcStateMachine.getStatus(intentId, ws);
                 targetId = status.activeStageState?.id;
             }
             if (!targetId) {
@@ -809,9 +851,11 @@ export function registerDlcTools(server) {
     server.tool("dlc_get_audit_trail", "Inspect the append-only audit trail and lifecycle event log (<record>/audit/audit.jsonl) for the active intent.", {
         intentId: z.string().optional().describe("Optional intent ID. Defaults to active intent."),
         limit: z.number().optional().default(50).describe("Maximum number of recent events to retrieve (default: 50)."),
-    }, async ({ intentId, limit }) => {
+        workspace: workspaceSchema,
+    }, async ({ intentId, limit, workspace }) => {
         try {
-            const events = await readAuditTrail(intentId);
+            const ws = resolveWs(workspace);
+            const events = await readAuditTrail(intentId, ws);
             if (events.length === 0) {
                 return {
                     content: [{ type: "text", text: "No audit events recorded yet." }],
@@ -844,9 +888,11 @@ export function registerDlcTools(server) {
             .optional()
             .default("all")
             .describe("Target client harness to install hooks into (default: 'all')"),
-    }, async ({ target }) => {
+        workspace: workspaceSchema,
+    }, async ({ target, workspace }) => {
         try {
-            const res = await installHooks({ target });
+            const ws = resolveWs(workspace);
+            const res = await installHooks({ target, workspaceDir: ws });
             const lines = [
                 `# AI-DLC Lifecycle Hooks Installation`,
                 `**Installed Components**:`,
@@ -880,12 +926,15 @@ export function registerDlcTools(server) {
             .describe("Hook event name to execute"),
         toolName: z.string().optional().describe("Tool name if executing pre-tool"),
         pathArg: z.string().optional().describe("Path argument if checking pre-tool"),
-    }, async ({ event, toolName, pathArg }) => {
+        workspace: workspaceSchema,
+    }, async ({ event, toolName, pathArg, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             const res = await executeHook({
                 event: event,
                 toolName,
                 toolArgs: pathArg ? { path: pathArg } : undefined,
+                workspaceDir: ws,
             });
             const lines = [
                 `# Hook Execution: \`${event}\``,
@@ -930,10 +979,12 @@ export function registerDlcTools(server) {
             .optional()
             .describe("Explicit phase for active guardrails resolution (defaults to active intent's phase)"),
         space: z.string().optional().describe("AI-DLC space name (defaults to default space)"),
-    }, async ({ layer, heading, phase, space }) => {
+        workspace: workspaceSchema,
+    }, async ({ layer, heading, phase, space, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             if (heading) {
-                const ruleContent = await getMemoryRule(layer === "active" ? "team" : layer, heading, undefined, space);
+                const ruleContent = await getMemoryRule(layer === "active" ? "team" : layer, heading, ws, space);
                 if (!ruleContent) {
                     return {
                         isError: true,
@@ -959,7 +1010,7 @@ export function registerDlcTools(server) {
             if (layer === "active") {
                 let resolvedPhase = phase;
                 if (!resolvedPhase) {
-                    const activeState = await loadActiveIntentState();
+                    const activeState = await loadActiveIntentState(ws);
                     if (activeState) {
                         const cur = activeState.stages[activeState.currentStageIndex];
                         if (cur && ["ideation", "inception", "construction", "operation"].includes(cur.phase)) {
@@ -967,7 +1018,7 @@ export function registerDlcTools(server) {
                         }
                     }
                 }
-                const mem = await resolveActiveMemory({ phase: resolvedPhase, space });
+                const mem = await resolveActiveMemory({ phase: resolvedPhase, space, workspaceDir: ws });
                 return {
                     content: [
                         {
@@ -977,7 +1028,7 @@ export function registerDlcTools(server) {
                     ],
                 };
             }
-            const raw = await readMemoryLayer(layer, undefined, space);
+            const raw = await readMemoryLayer(layer, ws, space);
             return {
                 content: [
                     {
@@ -1006,9 +1057,11 @@ export function registerDlcTools(server) {
             .string()
             .describe("Markdown text containing the affirmed rules or standards to persist under this heading"),
         space: z.string().optional().describe("AI-DLC space name (defaults to default space)"),
-    }, async ({ layer, heading, content, space }) => {
+        workspace: workspaceSchema,
+    }, async ({ layer, heading, content, space, workspace }) => {
         try {
-            const res = await updateMemoryRule(layer, heading, content, undefined, space);
+            const ws = resolveWs(workspace);
+            const res = await updateMemoryRule(layer, heading, content, ws, space);
             const targetSpace = space || "default";
             const citation = `- [memory:M1] aidlc/spaces/${targetSpace}/memory/${layer}.md#${heading}`;
             return {
@@ -1036,13 +1089,16 @@ export function registerDlcTools(server) {
             .describe("Stage slug/ID during which this was learned (e.g. 'construction/code-generation')"),
         author: z.string().optional().default("human").describe("Author/originator of the learning"),
         space: z.string().optional().describe("AI-DLC space name (defaults to default space)"),
-    }, async ({ learning, stageId, author, space }) => {
+        workspace: workspaceSchema,
+    }, async ({ learning, stageId, author, space, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             const res = await recordLearning({
                 learning,
                 stageId,
                 author,
                 space,
+                workspaceDir: ws,
             });
             return {
                 content: [
@@ -1063,7 +1119,10 @@ export function registerDlcTools(server) {
     // 25. dlc_get_scope_spec: Scope Specification & Execution Policies
     server.tool("dlc_get_scope_spec", "Retrieve the official AI-DLC scope specification, policies (skeleton, guardPolicy, reviewCap, sensors, learnings), and rationale for any of the 11 workflow scopes.", {
         scope: z.enum(SCOPE_ENUM_STRICT).describe("Scope name to inspect"),
-    }, async ({ scope }) => {
+        workspace: workspaceSchema,
+    }, async ({ scope, workspace }) => {
+        if (workspace)
+            resolveWs(workspace);
         try {
             const spec = getScopeSpec(scope);
             if (!spec) {
@@ -1110,12 +1169,13 @@ export function registerDlcTools(server) {
         content: z.string().optional().describe("Markdown content string to validate directly"),
         artifactPath: z.string().optional().describe("Workspace-relative or absolute path to artifact file"),
         space: z.string().optional().describe("AI-DLC space name (defaults to default space)"),
-    }, async ({ stageSlug, content, artifactPath, space }) => {
+        workspace: workspaceSchema,
+    }, async ({ stageSlug, content, artifactPath, space, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             let textToValidate = content;
             let filename = artifactPath ? path.basename(artifactPath) : `${stageSlug}.md`;
             if (!textToValidate && artifactPath) {
-                const ws = getWorkspaceDir();
                 const fullPath = path.isAbsolute(artifactPath) ? artifactPath : path.join(ws, artifactPath);
                 textToValidate = await fs.readFile(fullPath, "utf-8");
             }
@@ -1130,6 +1190,7 @@ export function registerDlcTools(server) {
                 content: textToValidate,
                 filename,
                 space,
+                workspaceDir: ws,
             });
             const statusEmoji = report.overallPass ? "✅" : "⚠️";
             const lines = [
@@ -1168,7 +1229,10 @@ export function registerDlcTools(server) {
     // 27. dlc_get_sensor_spec: Sensor Specification & Contracts
     server.tool("dlc_get_sensor_spec", "Retrieve the official specification, trigger events, and contract schema for any of the 6 AI-DLC sensors.", {
         sensorId: z.enum(SENSOR_ENUM).describe("Sensor identifier"),
-    }, async ({ sensorId }) => {
+        workspace: workspaceSchema,
+    }, async ({ sensorId, workspace }) => {
+        if (workspace)
+            resolveWs(workspace);
         try {
             const spec = getSensorSpec(sensorId);
             if (!spec) {
@@ -1204,9 +1268,11 @@ export function registerDlcTools(server) {
     // 28. dlc_session_cost: Session Cost & Runtime Metrics
     server.tool("dlc_session_cost", "Read-only session cost and execution metrics view. Prints deterministic aggregates for the current workflow: duration, stage outcomes, memory entries, sensor firings, and learnings.", {
         intentId: z.string().optional().describe("Optional intent ID (defaults to active intent)"),
-    }, async ({ intentId }) => {
+        workspace: workspaceSchema,
+    }, async ({ intentId, workspace }) => {
         try {
-            const report = await computeSessionCost(intentId);
+            const ws = resolveWs(workspace);
+            const report = await computeSessionCost(intentId, ws);
             const lines = [
                 "# AI-DLC Session Cost",
                 `* **Workflow**: \`${report.workflow_id}\``,
@@ -1239,9 +1305,11 @@ export function registerDlcTools(server) {
     // 29. dlc_session_replay: Narrative Session Replay
     server.tool("dlc_session_replay", "Print a structured session narrative replay for stakeholders who weren't in the room. Sourced from audit logs and delivered artifacts without mutating state.", {
         intentId: z.string().optional().describe("Optional intent ID (defaults to active intent)"),
-    }, async ({ intentId }) => {
+        workspace: workspaceSchema,
+    }, async ({ intentId, workspace }) => {
         try {
-            const markdown = await generateSessionReplay(intentId);
+            const ws = resolveWs(workspace);
+            const markdown = await generateSessionReplay(intentId, ws);
             return {
                 content: [{ type: "text", text: markdown }],
             };
@@ -1257,11 +1325,14 @@ export function registerDlcTools(server) {
     server.tool("dlc_outcomes_pack", "Generate a comprehensive OUTCOMES.md handover document at workflow close so the team can own, operate, and continue the system without re-running the workflow.", {
         intentId: z.string().optional().describe("Optional intent ID (defaults to active intent)"),
         writeToFile: z.boolean().optional().default(false).describe("If true, writes OUTCOMES.md to the workspace root"),
-    }, async ({ intentId, writeToFile }) => {
+        workspace: workspaceSchema,
+    }, async ({ intentId, writeToFile, workspace }) => {
         try {
+            const ws = resolveWs(workspace);
             const { content, filePath } = await generateOutcomesPack({
                 intentId,
                 writeToFile,
+                workspaceDir: ws,
             });
             const lines = [content];
             if (filePath) {
@@ -1281,7 +1352,10 @@ export function registerDlcTools(server) {
     // 31. dlc_get_skill_spec: Skill Specification & Contracts
     server.tool("dlc_get_skill_spec", "Retrieve the official SKILL.md specification, classification, and argument hints for an AI-DLC skill.", {
         skillName: z.enum(SKILL_ENUM).describe("Skill identifier"),
-    }, async ({ skillName }) => {
+        workspace: workspaceSchema,
+    }, async ({ skillName, workspace }) => {
+        if (workspace)
+            resolveWs(workspace);
         try {
             const spec = getSkillSpec(skillName);
             if (!spec) {
@@ -1316,9 +1390,10 @@ export function registerDlcTools(server) {
     server.tool("dlc_install_skills", "Export AI-DLC skills into agent tool directories (e.g. .cursor/skills, .claude/skills, or .agents/skills) for native assistant invocation.", {
         targetDirectory: z.string().optional().describe("Target skills directory (relative to workspace or absolute; defaults to .cursor/skills)"),
         skills: z.array(z.enum(SKILL_ENUM)).optional().describe("Optional list of specific skills to export (defaults to all)"),
-    }, async ({ targetDirectory, skills }) => {
+        workspace: workspaceSchema,
+    }, async ({ targetDirectory, skills, workspace }) => {
         try {
-            const ws = getWorkspaceDir();
+            const ws = resolveWs(workspace);
             const baseDir = targetDirectory
                 ? path.isAbsolute(targetDirectory)
                     ? targetDirectory
@@ -1356,9 +1431,12 @@ export function registerDlcTools(server) {
         }
     });
     // 33. dlc_list_extensions: Active Extensions & Custom Flows Inspector
-    server.tool("dlc_list_extensions", "List all active custom flows, scopes, stages, sensors, and knowledge packs loaded across the 3-tier hierarchy (Tier 1: Built-in, Tier 2: Org Repo, Tier 3: Workspace Local).", {}, async () => {
+    server.tool("dlc_list_extensions", "List all active custom flows, scopes, stages, sensors, and knowledge packs loaded across the 3-tier hierarchy (Tier 1: Built-in, Tier 2: Org Repo, Tier 3: Workspace Local).", {
+        workspace: workspaceSchema,
+    }, async ({ workspace }) => {
         try {
-            const cache = loadAllExtensions();
+            const ws = resolveWs(workspace);
+            const cache = loadAllExtensions(ws);
             const lines = [
                 "# 🧩 AI-DLC Custom Flows & Extensions Registry",
                 `* **Tier 1 (Built-in Core)**: 11 scopes, 33 stages, 59 playbooks, 6 sensors, 4 skills`,

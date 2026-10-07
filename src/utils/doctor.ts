@@ -8,9 +8,32 @@ import { listAllIntents, loadActiveIntentState } from "./filesystem.js";
 
 const execAsync = promisify(exec);
 
-export async function runDlcDoctor(workspaceDir: string = getWorkspaceDir()): Promise<DoctorReport> {
+export async function runDlcDoctor(workspaceDir?: string): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
-  const spaceDir = getSpaceDir(workspaceDir);
+  const ws = workspaceDir || ((): string => {
+    try {
+      return getWorkspaceDir();
+    } catch {
+      return "/";
+    }
+  })();
+
+  // 0. Check Workspace Directory Resolution
+  if (ws === "/" || !ws) {
+    checks.push({
+      name: "Workspace Directory Resolution",
+      status: "fail",
+      message: "Workspace resolved to filesystem root ('/'). The MCP server daemon was spawned without a project working directory. Please specify 'workspace' argument in tool calls (e.g. workspace: '/path/to/project') or configure 'AIDLC_WORKSPACE' in your environment.",
+    });
+  } else {
+    checks.push({
+      name: "Workspace Directory Resolution",
+      status: "pass",
+      message: `Workspace directory validly resolved to '${ws}'.`,
+    });
+  }
+
+  const spaceDir = getSpaceDir(ws);
 
   // 1. Check Node.js version
   try {
@@ -39,9 +62,12 @@ export async function runDlcDoctor(workspaceDir: string = getWorkspaceDir()): Pr
 
   // 2. Check Git repository
   try {
-    const gitDir = path.join(workspaceDir, ".git");
+    if (ws === "/") {
+      throw new Error("Root directory cannot be a project Git repository.");
+    }
+    const gitDir = path.join(ws, ".git");
     await fs.access(gitDir);
-    const { stdout } = await execAsync("git branch --show-current", { cwd: workspaceDir });
+    const { stdout } = await execAsync("git branch --show-current", { cwd: ws });
     checks.push({
       name: "Git Repository",
       status: "pass",
@@ -57,7 +83,10 @@ export async function runDlcDoctor(workspaceDir: string = getWorkspaceDir()): Pr
 
   // 3. Check Workspace Writeability
   try {
-    const testFile = path.join(workspaceDir, ".aidlc-write-test.tmp");
+    if (ws === "/") {
+      throw new Error("Filesystem root ('/') is protected.");
+    }
+    const testFile = path.join(ws, ".aidlc-write-test.tmp");
     await fs.writeFile(testFile, "test", "utf-8");
     await fs.unlink(testFile);
     checks.push({
@@ -79,7 +108,7 @@ export async function runDlcDoctor(workspaceDir: string = getWorkspaceDir()): Pr
     checks.push({
       name: "AI-DLC Space Scaffold",
       status: "pass",
-      message: `Active space '${CONFIG.DEFAULT_SPACE}' directory present at \`${path.relative(workspaceDir, spaceDir)}\`.`,
+      message: `Active space '${CONFIG.DEFAULT_SPACE}' directory present at \`${path.relative(ws, spaceDir)}\`.`,
     });
   } catch {
     checks.push({
@@ -91,8 +120,8 @@ export async function runDlcDoctor(workspaceDir: string = getWorkspaceDir()): Pr
 
   // 5. Check Active Intent Health
   try {
-    const intents = await listAllIntents(workspaceDir);
-    const active = await loadActiveIntentState(workspaceDir);
+    const intents = await listAllIntents(ws);
+    const active = await loadActiveIntentState(ws);
 
     if (active) {
       checks.push({
@@ -126,7 +155,7 @@ export async function runDlcDoctor(workspaceDir: string = getWorkspaceDir()): Pr
 
   return {
     overallStatus: hasFail ? "error" : hasWarn ? "warning" : "healthy",
-    workspaceDir,
+    workspaceDir: ws,
     activeSpace: CONFIG.DEFAULT_SPACE,
     checks,
   };

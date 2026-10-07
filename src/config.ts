@@ -10,8 +10,54 @@ export const CONFIG = {
   ACTIVE_INTENT_FILE: "active-intent.json",
 };
 
+let activeWorkspaceDir: string | null = null;
+
+export function setActiveWorkspaceDir(dir?: string): void {
+  if (dir && typeof dir === "string" && dir.trim() !== "" && dir.trim() !== "/") {
+    activeWorkspaceDir = path.resolve(dir.trim());
+  }
+}
+
+export function getActiveWorkspaceDir(): string | null {
+  return activeWorkspaceDir;
+}
+
 export function getWorkspaceDir(): string {
-  return process.env.AIDLC_WORKSPACE || process.cwd();
+  // 1. Explicit AIDLC_WORKSPACE environment variable
+  if (process.env.AIDLC_WORKSPACE && process.env.AIDLC_WORKSPACE.trim() !== "" && process.env.AIDLC_WORKSPACE.trim() !== "/") {
+    return path.resolve(process.env.AIDLC_WORKSPACE.trim());
+  }
+
+  // 2. In-memory active workspace dynamically anchored by a tool call in current session
+  if (activeWorkspaceDir && activeWorkspaceDir !== "/") {
+    return activeWorkspaceDir;
+  }
+
+  // 3. Common IDE / Runner environment variables (e.g. npx sets INIT_CWD to caller directory)
+  const candidateEnvs = [
+    process.env.INIT_CWD,
+    process.env.WORKSPACE_ROOT,
+    process.env.PROJECT_DIR,
+    process.env.WORKSPACE_FOLDER,
+    process.env.PWD,
+  ];
+
+  for (const cand of candidateEnvs) {
+    if (cand && typeof cand === "string" && cand.trim() !== "" && cand.trim() !== "/") {
+      return path.resolve(cand.trim());
+    }
+  }
+
+  // 4. Process working directory if not root
+  const cwd = process.cwd();
+  if (cwd && cwd !== "/") {
+    return path.resolve(cwd);
+  }
+
+  // 5. If root (/), throw an informative, actionable error
+  throw new Error(
+    "AI-DLC workspace cannot be filesystem root ('/'). The MCP server daemon was spawned without a project working directory. Please provide the 'workspace' argument in your tool call (e.g. workspace: '/path/to/project'), configure 'AIDLC_WORKSPACE' in your MCP server env config, or specify 'cwd' in mcp_config.json."
+  );
 }
 
 export function getSpaceDir(workspaceDir: string = getWorkspaceDir(), space: string = CONFIG.DEFAULT_SPACE): string {

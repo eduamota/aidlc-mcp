@@ -7,6 +7,8 @@ export declare const CONFIG: {
     DESCRIPTION_FILE: string;
     ACTIVE_INTENT_FILE: string;
 };
+export declare function setActiveWorkspaceDir(dir?: string): void;
+export declare function getActiveWorkspaceDir(): string | null;
 export declare function getWorkspaceDir(): string;
 export declare function getSpaceDir(workspaceDir?: string, space?: string): string;
 export declare function getIntentsDir(workspaceDir?: string, space?: string): string;
